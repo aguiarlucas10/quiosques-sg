@@ -8,9 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Questrial&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 
-<!-- ═══════════════════════════════════════════════════════
-     FIREBASE SDK  (não alterar)
-     ═══════════════════════════════════════════════════ -->
+<!-- Firebase SDK -->
 <script type="module">
 import { initializeApp }
   from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
@@ -19,14 +17,6 @@ import { getFirestore, doc, setDoc, onSnapshot }
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
 
-// ╔═══════════════════════════════════════════════════════╗
-// ║  PASSO 1 — Cole aqui as credenciais do seu projeto    ║
-// ║                                                       ║
-// ║  Como obter:                                          ║
-// ║  1. console.firebase.google.com                       ║
-// ║  2. Seu projeto → Configurações → Apps → Web          ║
-// ║  3. Copie o objeto firebaseConfig                     ║
-// ╚═══════════════════════════════════════════════════════╝
 const firebaseConfig = {
   apiKey:            "AIzaSyDIh81rAN7RSE8QcC5TUX0utYQKrarEdM0",
   authDomain:        "quiosque-sg.firebaseapp.com",
@@ -36,116 +26,96 @@ const firebaseConfig = {
   appId:             "1:426898777738:web:1fc62d5dda89389d2c2f73"
 };
 
-// ╔═══════════════════════════════════════════════════════╗
-// ║  PASSO 2 — Regras do Firestore                        ║
-// ║                                                       ║
-// ║  No console Firebase:                                 ║
-// ║  Firestore → Regras → cole e publique:                ║
-// ║                                                       ║
-// ║  rules_version = '2';                                 ║
-// ║  service cloud.firestore {                            ║
-// ║    match /databases/{database}/documents {            ║
-// ║      match /app/{doc} {                               ║
-// ║        allow read:  if true;                          ║
-// ║        allow write: if request.auth != null;          ║
-// ║      }                                                ║
-// ║    }                                                  ║
-// ║  }                                                    ║
-// ╚═══════════════════════════════════════════════════════╝
+/* ── Firestore rules (deploy in Firebase console):
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /app/{doc} {
+      allow read:  if true;
+      allow write: if request.auth != null;
+    }
+  }
+}
+*/
 
-// ╔═══════════════════════════════════════════════════════╗
-// ║  PASSO 3 — Criar usuário admin                        ║
-// ║                                                       ║
-// ║  No console Firebase:                                 ║
-// ║  Authentication → Users → Adicionar usuário           ║
-// ║  Use o email e senha que preferir                     ║
-// ╚═══════════════════════════════════════════════════════╝
-
-// ── Inicialização ────────────────────────────────────────
 const app  = initializeApp(firebaseConfig);
 const db   = getFirestore(app);
 const auth = getAuth(app);
-
 const REF_STORE = doc(db, 'app', 'store');
 const REF_GOALS = doc(db, 'app', 'goals');
 
-// ── Salvar no Firestore (chamado pelos handlers inline) ──
-window.saveStore = async function() {
-  try {
-    await setDoc(REF_STORE, window._store);
-  } catch(e) {
-    console.error(e);
-    showStatus('Erro ao salvar no Firebase: ' + e.message, 'err');
-    throw e;
-  }
+// ── Persistência ────────────────────────────────────────
+window.fbSaveStore = async function(data) {
+  await setDoc(REF_STORE, data);
 };
-window.saveGoals = async function() {
-  window._goals._v3 = true;
-  try {
-    await setDoc(REF_GOALS, window._goals);
-  } catch(e) {
-    console.error(e);
-    showStatus('Erro ao salvar metas: ' + e.message, 'err');
-    throw e;
-  }
+window.fbSaveGoals = async function(data) {
+  await setDoc(REF_GOALS, data);
 };
 
 // ── Listeners em tempo real ──────────────────────────────
-// Todos que têm o link veem atualizações sem recarregar
+// Usamos uma flag para não renderizar antes de ambos os docs chegarem
+let storeLoaded = false, goalsLoaded = false;
+
 onSnapshot(REF_STORE, snap => {
-  if (!snap.exists()) return;
+  if (!snap.exists()) { storeLoaded = true; tryRender(); return; }
   window._store = snap.data();
-  if (Object.keys(window._store.kiosks||{}).length > 0) {
-    renderGeral();
-    renderKiosques();
-  }
-}, err => console.warn('store snapshot:', err));
+  storeLoaded = true;
+  tryRender();
+}, err => { storeLoaded = true; console.warn('store:', err); });
 
 onSnapshot(REF_GOALS, snap => {
-  if (!snap.exists()) return;
+  if (!snap.exists()) { goalsLoaded = true; tryRender(); return; }
   window._goals = snap.data();
-  if (Object.keys(window._store?.kiosks||{}).length > 0) {
+  goalsLoaded = true;
+  tryRender();
+  if (document.getElementById('pnl-goals')?.classList.contains('on')) renderGoals();
+}, err => { goalsLoaded = true; console.warn('goals:', err); });
+
+function tryRender() {
+  // Only render dashboards after BOTH docs have loaded at least once
+  if (!storeLoaded || !goalsLoaded) return;
+  if (Object.keys(window._store?.kiosks || {}).length > 0) {
     renderGeral();
     renderKiosques();
+  } else {
+    // No data yet — show empty state
+    showEmptyState();
   }
-  if (document.getElementById('pnl-goals')?.classList.contains('on')) renderGoals();
-}, err => console.warn('goals snapshot:', err));
+}
 
 // ── Auth ─────────────────────────────────────────────────
 onAuthStateChanged(auth, user => {
-  isAdmin = !!user;
-  const btn   = document.getElementById('btnLogin');
-  const chip  = document.getElementById('chip');
-  const chipN = document.getElementById('chipName');
+  window._isAdmin = !!user;
+  const btn  = document.getElementById('btnLogin');
+  const chip = document.getElementById('chip');
   if (user) {
     btn.style.display = 'none';
     chip.classList.add('show');
-    chipN.textContent = user.email.split('@')[0];
+    document.getElementById('chipName').textContent = user.email.split('@')[0];
     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('show'));
   } else {
     btn.style.display = '';
     chip.classList.remove('show');
     document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('show'));
-    // Se estava em aba admin, volta para geral
-    if (!document.getElementById('pnl-geral').classList.contains('on') &&
-        !document.getElementById('pnl-kiosques').classList.contains('on')) {
+    const active = document.querySelector('.pnl.on');
+    if (active && (active.id === 'pnl-import' || active.id === 'pnl-goals')) {
       nav('geral', document.querySelector('.tab'));
     }
   }
 });
 
-window._doLogin = async function(email, password) {
+window._doLogin = async (email, password) => {
   try {
     await signInWithEmailAndPassword(auth, email, password);
     closeLogin();
     document.getElementById('me').textContent = '';
   } catch(e) {
     const msgs = {
-      'auth/invalid-credential': 'Email ou senha incorretos',
-      'auth/user-not-found':     'Usuário não encontrado',
-      'auth/wrong-password':     'Senha incorreta',
-      'auth/invalid-email':      'Email inválido',
-      'auth/too-many-requests':  'Muitas tentativas. Aguarde um momento.',
+      'auth/invalid-credential':'Email ou senha incorretos',
+      'auth/user-not-found':'Usuário não encontrado',
+      'auth/wrong-password':'Senha incorreta',
+      'auth/invalid-email':'Email inválido',
+      'auth/too-many-requests':'Muitas tentativas. Aguarde.',
     };
     document.getElementById('me').textContent = msgs[e.code] || e.message;
   }
@@ -162,37 +132,25 @@ window._doLogout = () => signOut(auth);
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 html{-webkit-tap-highlight-color:transparent}
 body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:.95rem;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
-::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 
-/* STATUS TOAST */
-#statusBar{
-  display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-  z-index:999;background:var(--surface);border:1px solid var(--border);
-  border-radius:40px;padding:8px 20px;font-size:.78rem;white-space:nowrap;
-  box-shadow:0 4px 24px rgba(0,0,0,.5);transition:opacity .2s;
-}
-#statusBar.show{display:block}
-#statusBar.err{border-color:var(--danger);color:var(--danger)}
-#statusBar.ok{border-color:var(--success);color:var(--success)}
+/* TOAST */
+#statusBar{display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:40px;padding:8px 20px;font-size:.78rem;white-space:nowrap;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+#statusBar.show{display:block}#statusBar.err{border-color:var(--danger);color:var(--danger)}#statusBar.ok{border-color:var(--success);color:var(--success)}
 
 /* TOPBAR */
 .topbar{display:flex;align-items:center;justify-content:space-between;height:56px;padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 .logo{font-size:.8rem;letter-spacing:.22em;text-transform:uppercase;user-select:none}
 .tabs{display:flex;align-items:stretch;height:100%}
 .tab{display:flex;align-items:center;padding:0 20px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap;min-height:46px}
-.tab:hover{color:var(--text)}
-.tab.on{color:var(--text);border-bottom-color:#fff}
-.tab.admin-only{display:none}
-.tab.admin-only.show{display:flex}
+.tab:hover{color:var(--text)}.tab.on{color:var(--text);border-bottom-color:#fff}
+.tab.admin-only{display:none}.tab.admin-only.show{display:flex}
 .bar-r{display:flex;align-items:center;gap:10px}
-.btn-outline{padding:0 16px;height:36px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:.75rem;letter-spacing:.03em;cursor:pointer;transition:border-color .15s}
+.btn-outline{padding:0 16px;height:36px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:.75rem;cursor:pointer;transition:border-color .15s}
 .btn-outline:hover{border-color:#fff}
 .chip{display:none;align-items:center;gap:8px;padding:0 14px;height:36px;border:1px solid var(--border);border-radius:8px;font-size:.75rem;color:var(--muted)}
-.chip.show{display:flex}
-.chip-name{color:var(--text)}
-.chip button{background:none;border:none;color:var(--muted);font-family:var(--font);font-size:.7rem;letter-spacing:.06em;cursor:pointer;transition:color .15s}
+.chip.show{display:flex}.chip-name{color:var(--text)}
+.chip button{background:none;border:none;color:var(--muted);font-family:var(--font);font-size:.7rem;cursor:pointer;transition:color .15s}
 .chip button:hover{color:var(--danger)}
 
 /* PANELS */
@@ -207,8 +165,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:.9
 
 /* KPI */
 .kpi-g{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px}
-.kpi{background:var(--surface);padding:20px 22px;transition:background .15s}
-.kpi:hover{background:var(--surface2)}
+.kpi{background:var(--surface);padding:20px 22px;transition:background .15s}.kpi:hover{background:var(--surface2)}
 .kpi-l{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 .kpi-v{font-family:var(--mono);font-size:1.5rem;color:var(--text);line-height:1;margin-bottom:6px}
 .kpi-m{font-size:.7rem;color:var(--muted)}
@@ -228,29 +185,29 @@ td{padding:12px 16px;font-size:.88rem;border-bottom:1px solid var(--border);vert
 tr:last-child td{border-bottom:none}
 tr:hover td{background:var(--surface2)}
 .mo{font-family:var(--mono);font-size:.82rem}
-.num{text-align:right}
-th.num{text-align:right}
+.num{text-align:right}th.num{text-align:right}
 .rank-num{font-family:var(--mono);font-size:.68rem;color:var(--muted)}
 
 /* PROGRESS */
-.mb-w{display:flex;align-items:center;gap:8px;min-width:120px}
 .mb{flex:1;height:2px;background:var(--border);border-radius:1px;overflow:hidden}
-.mf{height:100%;border-radius:1px;transition:width .7s cubic-bezier(.4,0,.2,1);background:#fff}
-.mp{font-family:var(--mono);font-size:.68rem;width:42px;text-align:right;color:var(--muted)}
+.mf{height:100%;border-radius:1px;transition:width .7s cubic-bezier(.4,0,.2,1)}
 .gbadge{display:inline-block;font-family:var(--mono);font-size:.65rem;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.08);color:var(--muted);vertical-align:middle;margin-left:4px}
 .gbadge.hit{background:rgba(76,175,125,.15);color:var(--success)}
 .gbadge.warn{background:rgba(240,165,0,.12);color:#f0a500}
 .gbadge.miss{background:rgba(224,82,82,.12);color:var(--danger)}
+
+/* GOAL PROGRESS BLOCK (inline in table cell) */
+.gp{min-width:160px}
+.gp-row{display:flex;justify-content:space-between;align-items:center;font-size:.7rem;margin-bottom:4px}
+.gp-meta{font-size:.65rem;color:var(--muted);margin-top:3px}
 
 /* KIOSK CARDS */
 .kg{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .kc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .15s}
 .kc:hover{border-color:#444}
 .kch{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}
-.kcn{font-size:1.15rem;color:var(--text)}
-.kct{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:3px}
-.ktot{text-align:right}
-.ktl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.kcn{font-size:1.15rem;color:var(--text)}.kct{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.ktot{text-align:right}.ktl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
 .ktv{font-family:var(--mono);font-size:1.5rem;color:var(--text)}
 .kgoal{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
 .kgoal-item{background:var(--surface2);padding:12px 14px}
@@ -263,98 +220,132 @@ th.num{text-align:right}
 .ms-g{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
 .ms{background:var(--surface2);padding:12px 14px}
 .ms-l{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.ms-v{font-family:var(--mono);font-size:.95rem;color:var(--text)}
-.ms-s{font-size:.7rem;color:var(--muted);margin-top:2px}
+.ms-v{font-family:var(--mono);font-size:.95rem;color:var(--text)}.ms-s{font-size:.7rem;color:var(--muted);margin-top:2px}
 .sd{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 .kcc{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
 .kcc-l{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 .star{display:inline-block;width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.1);font-size:8px;line-height:16px;text-align:center;margin-right:6px;color:var(--text)}
+
+/* INACTIVE seller row */
+tr.inactive td{opacity:.35}
+.tag-inactive{font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;background:rgba(255,255,255,.06);color:var(--muted);padding:1px 6px;border-radius:3px;margin-left:6px}
 
 /* IMPORT */
 .notice{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;font-size:.8rem;color:var(--muted);margin-bottom:20px;line-height:1.6}
 .notice strong{color:var(--text);font-weight:400}
 .drop{border:1px dashed var(--border);border-radius:12px;padding:48px 32px;text-align:center;cursor:pointer;background:var(--surface);transition:border-color .2s,background .2s;margin-bottom:16px;min-height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
 .drop:hover,.drop.over{border-color:#fff;background:var(--surface2)}
-.drop-i{font-size:1.3rem;color:var(--muted)}
-.drop-t{font-size:.95rem;color:var(--text)}
-.drop-h{font-size:.75rem;color:var(--muted)}
+.drop-i{font-size:1.3rem;color:var(--muted)}.drop-t{font-size:.95rem;color:var(--text)}.drop-h{font-size:.75rem;color:var(--muted)}
 #fi{display:none}
 .logbox{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;font-family:var(--mono);font-size:.75rem;max-height:180px;overflow-y:auto;margin-bottom:20px;line-height:1.8}
 .ll.ok{color:var(--success)}.ll.warn{color:#f0a500}.ll.err{color:var(--danger)}.ll.info{color:var(--text)}.ll.dim{color:var(--muted)}
 
-/* GOALS */
+/* GOALS PANEL */
 .goals-month-bar{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:20px}
-.goals-month-btn{padding:0 16px;height:34px;background:none;border:1px solid var(--border);border-radius:20px;color:var(--muted);font-family:var(--font);font-size:.78rem;letter-spacing:.04em;cursor:pointer;transition:color .15s,border-color .15s,background .15s;white-space:nowrap}
+.goals-month-btn{padding:0 16px;height:34px;background:none;border:1px solid var(--border);border-radius:20px;color:var(--muted);font-family:var(--font);font-size:.78rem;letter-spacing:.04em;cursor:pointer;transition:all .15s;white-space:nowrap}
 .goals-month-btn:hover{color:var(--text);border-color:#555}
 .goals-month-btn.on{background:#fff;border-color:#fff;color:#000}
+
 .goals-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
 .goals-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px}
 .goals-card-title{font-size:.88rem;margin-bottom:4px}
 .goals-card-sub{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .goals-card-hint{font-size:.75rem;color:var(--muted);margin-bottom:20px;line-height:1.5;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)}
 .goals-card-hint strong{color:var(--text);font-weight:400}
-.goal-kiosk-header{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:14px 0 8px;border-top:1px solid var(--border);margin-top:6px}
-.goal-kiosk-header:first-child{border-top:none;padding-top:0}
-.goal-entity{border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:14px}
-.goal-entity:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
-.goal-entity-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
-.goal-name{font-size:.88rem;color:var(--text)}
-.goal-sub{font-size:.7rem;color:var(--muted);margin-top:2px}
-.goal-inp-wrap{display:flex;flex-direction:column;gap:3px}
-.goal-inp-lbl{font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.goal-inp{padding:0 10px;height:36px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:.82rem;outline:none;transition:border-color .15s;-webkit-appearance:none;text-align:right}
-.goal-inp:focus{border-color:#fff}
-.goal-inp::placeholder{color:var(--muted);opacity:1}
-.goal-inp-sm{height:30px;font-size:.78rem;width:70px}
-.goal-weeks{display:flex;flex-direction:column;gap:6px}
-.goal-week-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.goal-week-lbl{font-size:.78rem;color:var(--text);white-space:nowrap;flex:1}
+.goal-kiosk-section{margin-bottom:8px;padding-bottom:8px}
+.goal-kiosk-section:not(:first-child){border-top:1px solid var(--border);padding-top:16px;margin-top:8px}
+
+/* Kiosk goal config block */
+.gk-block{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:8px}
+.gk-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:12px}
+.gk-name{font-size:.95rem;color:var(--text)}
+.gk-sub{font-size:.7rem;color:var(--muted);margin-top:2px}
+
+/* Standard (padrão) goal inputs row */
+.gk-std{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.gk-std-item{display:flex;flex-direction:column;gap:4px}
+.gk-lbl{font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.gk-inp-row{display:flex;align-items:center;gap:6px}
+.gk-inp{flex:1;padding:0 10px;height:36px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:.85rem;outline:none;transition:border-color .15s;-webkit-appearance:none;text-align:right}
+.gk-inp:focus{border-color:#fff}
+.gk-inp::placeholder{color:var(--muted);opacity:1}
+.gk-unit{font-size:.68rem;color:var(--muted);white-space:nowrap}
+
+/* Derived total display */
+.gk-derived{display:flex;gap:8px;margin-bottom:14px}
+.gk-derived-item{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px}
+.gk-derived-lbl{font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.gk-derived-val{font-family:var(--mono);font-size:.88rem;color:var(--text)}
+
+/* Seller toggle list */
+.gk-sellers-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.seller-toggle-list{display:flex;flex-direction:column;gap:4px}
+.seller-toggle{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:border-color .15s;user-select:none}
+.seller-toggle:hover{border-color:#444}
+.seller-toggle.active{border-color:var(--success)}
+.seller-toggle-name{font-size:.85rem;color:var(--text)}
+.seller-toggle-liq{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.seller-toggle-switch{width:32px;height:18px;border-radius:9px;background:var(--border);position:relative;transition:background .15s;flex-shrink:0}
+.seller-toggle.active .seller-toggle-switch{background:var(--success)}
+.seller-toggle-switch::after{content:'';position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;top:3px;left:3px;transition:transform .15s}
+.seller-toggle.active .seller-toggle-switch::after{transform:translateX(14px)}
+
+/* Week goals inside kiosk block */
+.gk-weeks{display:flex;flex-direction:column;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.gk-week-lbl{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.gk-week-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gk-week-label{font-size:.8rem;color:var(--text);flex:1;white-space:nowrap}
+.gk-week-right{display:flex;align-items:center;gap:6px}
+.gk-week-calc{font-family:var(--mono);font-size:.68rem;color:var(--muted);min-width:90px;text-align:right}
+
+/* Seller individual override (inside kiosk block) */
+.gk-seller-overrides{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.gk-overrides-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.gk-override-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(42,42,42,.5);gap:8px}
+.gk-override-row:last-child{border-bottom:none}
+.gk-override-name{font-size:.82rem;color:var(--text);flex:1}
+.gk-override-inputs{display:flex;gap:6px}
+
+/* Buttons */
+.btn-primary{display:inline-flex;align-items:center;justify-content:center;padding:0 28px;height:46px;background:#fff;color:#000;border:none;border-radius:8px;font-family:var(--font);font-size:.88rem;cursor:pointer;transition:opacity .15s}
+.btn-primary:hover{opacity:.88}.btn-primary:disabled{opacity:.3;cursor:not-allowed}
+.btn-secondary{display:inline-flex;align-items:center;justify-content:center;padding:0 20px;height:36px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:.8rem;cursor:pointer;transition:border-color .15s}
+.btn-secondary:hover{border-color:#fff}
+
 .goals-actions{display:flex;align-items:center;gap:12px;margin-top:24px}
 .save-notice{font-size:.72rem;color:var(--success);display:none}
 .save-notice.show{display:block}
 
-/* BUTTONS */
-.btn-primary{display:inline-flex;align-items:center;justify-content:center;padding:0 28px;height:46px;background:#fff;color:#000;border:none;border-radius:8px;font-family:var(--font);font-size:.88rem;letter-spacing:.03em;cursor:pointer;transition:opacity .15s}
-.btn-primary:hover{opacity:.88}
-.btn-primary:disabled{opacity:.3;cursor:not-allowed}
-.btn-secondary{display:inline-flex;align-items:center;justify-content:center;padding:0 20px;height:36px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:.8rem;letter-spacing:.03em;cursor:pointer;transition:border-color .15s}
-.btn-secondary:hover{border-color:#fff}
-
 /* MODAL */
-.ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.80);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center}
+.ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.80);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center}
 .ov.show{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px;width:360px;position:relative}
 .modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 28px}
-.mt{font-size:1.15rem;margin-bottom:4px}
-.ms2{font-size:.75rem;color:var(--muted);margin-bottom:28px}
+.mt{font-size:1.15rem;margin-bottom:4px}.ms2{font-size:.75rem;color:var(--muted);margin-bottom:28px}
 .fld{margin-bottom:16px}
 .fl{display:block;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
 .fi2{width:100%;padding:0 14px;height:46px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:1rem;outline:none;transition:border-color .15s;-webkit-appearance:none}
 .fi2:focus{border-color:#fff}
 .me{font-size:.72rem;color:var(--danger);min-height:16px;margin-top:6px}
-.bm{width:100%;height:46px;background:#fff;color:#000;border:none;border-radius:8px;font-family:var(--font);font-size:.88rem;letter-spacing:.03em;cursor:pointer;margin-top:8px;transition:opacity .15s}
-.bm:hover{opacity:.88}
-.bm:disabled{opacity:.4;cursor:not-allowed}
+.bm{width:100%;height:46px;background:#fff;color:#000;border:none;border-radius:8px;font-family:var(--font);font-size:.88rem;cursor:pointer;margin-top:8px;transition:opacity .15s}
+.bm:hover{opacity:.88}.bm:disabled{opacity:.4;cursor:not-allowed}
 .mx{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:6px 10px;transition:color .15s}
 .mx:hover{color:var(--text)}
 
 /* EMPTY */
 .empty{text-align:center;padding:72px 24px}
 .ei{font-size:2rem;margin-bottom:16px;color:var(--border)}
-.et{font-size:.95rem;margin-bottom:6px}
-.eh{font-size:.8rem;color:var(--muted)}
+.et{font-size:.95rem;margin-bottom:6px}.eh{font-size:.8rem;color:var(--muted)}
 .meta-line{font-family:var(--mono);font-size:.68rem;color:var(--muted);margin-top:10px}
 
 /* RESPONSIVE */
 @media(max-width:1024px){.kpi-g{grid-template-columns:repeat(2,1fr)}.cr{grid-template-columns:1fr}.kg{grid-template-columns:1fr}.goals-grid{grid-template-columns:1fr}}
-@media(max-width:640px){.topbar{padding:0 16px}.logo{font-size:.72rem}.tab{padding:0 12px;font-size:.7rem}.pnl{padding:20px 16px 56px}.kpi-g{grid-template-columns:1fr 1fr}.kpi-v{font-size:1.1rem}.modal{width:calc(100% - 32px);padding:28px 20px}.kgoal{grid-template-columns:1fr}.goal-entity-head{flex-direction:column;gap:10px}.goal-week-row{gap:6px}.goal-inp-sm{width:70px}}
+@media(max-width:640px){.topbar{padding:0 16px}.logo{font-size:.72rem}.tab{padding:0 12px;font-size:.7rem}.pnl{padding:20px 16px 56px}.kpi-g{grid-template-columns:1fr 1fr}.kpi-v{font-size:1.1rem}.modal{width:calc(100% - 32px);padding:28px 20px}.gk-std{grid-template-columns:1fr}.kgoal{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-
 <div id="statusBar"></div>
 
-<!-- TOPBAR -->
 <header class="topbar">
   <div class="logo">Saint Germain</div>
   <nav class="tabs">
@@ -364,291 +355,175 @@ th.num{text-align:right}
     <button class="tab admin-only" id="tabGoals"  onclick="nav('goals',this)">Metas</button>
   </nav>
   <div class="bar-r">
-    <div class="chip" id="chip">
-      <span class="chip-name" id="chipName"></span>
-      <button onclick="window._doLogout()">sair</button>
-    </div>
+    <div class="chip" id="chip"><span class="chip-name" id="chipName"></span><button onclick="window._doLogout()">sair</button></div>
     <button class="btn-outline" id="btnLogin" onclick="openLogin()">Entrar</button>
   </div>
 </header>
 
-<!-- PAINEL GERAL -->
 <section class="pnl on" id="pnl-geral">
-  <div class="h1">Visão Geral</div>
-  <div class="sub">Consolidado de todos os quiosques</div>
-  <div id="geralBody">
-    <div class="empty"><div class="ei">○</div><div class="et">Carregando…</div><div class="eh">Conectando ao Firebase</div></div>
-  </div>
+  <div class="h1">Visão Geral</div><div class="sub">Consolidado de todos os quiosques</div>
+  <div id="geralBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div><div class="eh">Conectando ao Firebase</div></div></div>
 </section>
 
-<!-- PAINEL QUIOSQUES -->
 <section class="pnl" id="pnl-kiosques">
-  <div class="h1">Quiosques</div>
-  <div class="sub">Desempenho por unidade e vendedor</div>
-  <div id="kiosquesBody">
-    <div class="empty"><div class="ei">○</div><div class="et">Carregando…</div><div class="eh">Conectando ao Firebase</div></div>
-  </div>
+  <div class="h1">Quiosques</div><div class="sub">Desempenho por unidade e vendedor</div>
+  <div id="kiosquesBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div><div class="eh">Conectando ao Firebase</div></div></div>
 </section>
 
-<!-- PAINEL IMPORTAR -->
 <section class="pnl" id="pnl-import">
-  <div class="h1">Importar Relatório</div>
-  <div class="sub">PDVSuite · VENRES.RPT</div>
-  <div class="notice">
-    Formato: CSV exportado via <strong>Gestor → Relatório Financeiro → Vendas por Vendedor</strong>.<br>
-    Deduplicação automática — reimportar o mesmo arquivo é seguro. Os dados são publicados no Firebase e visíveis para todos.
-  </div>
+  <div class="h1">Importar Relatório</div><div class="sub">PDVSuite · VENRES.RPT</div>
+  <div class="notice">Formato: CSV exportado via <strong>Gestor → Relatório Financeiro → Vendas por Vendedor</strong>. Deduplicação automática — reimportar é seguro.</div>
   <div class="drop" id="drop" onclick="document.getElementById('fi').click()">
-    <div class="drop-i">↑</div>
-    <div class="drop-t">Arraste o CSV aqui</div>
-    <div class="drop-h">ou clique para selecionar · .csv</div>
+    <div class="drop-i">↑</div><div class="drop-t">Arraste o CSV aqui</div><div class="drop-h">ou clique para selecionar · .csv</div>
   </div>
   <input type="file" id="fi" accept=".csv,.txt" onchange="onFile(event)">
   <div class="logbox" id="logbox"><div class="ll dim">— aguardando arquivo —</div></div>
   <button class="btn-primary" id="btnProc" onclick="processCSV()" disabled>Processar e publicar</button>
 </section>
 
-<!-- PAINEL METAS -->
 <section class="pnl" id="pnl-goals">
-  <div class="h1">Configurar Metas</div>
-  <div class="sub">Metas mensais e semanais · salvas automaticamente no Firebase</div>
-  <div id="goalsBody">
-    <div class="empty"><div class="ei">○</div><div class="et">Importe um relatório primeiro</div><div class="eh">As metas ficam disponíveis após importar os dados</div></div>
-  </div>
+  <div class="h1">Configurar Metas</div><div class="sub">Padrão por quiosque · desdobramento automático</div>
+  <div id="goalsBody"><div class="empty"><div class="ei">○</div><div class="et">Importe um relatório primeiro</div></div></div>
 </section>
 
-<!-- MODAL LOGIN -->
 <div class="ov" id="ov">
   <div class="modal">
     <button class="mx" onclick="closeLogin()">✕</button>
     <div class="modal-handle"></div>
     <div class="mt">Acesso admin</div>
-    <div class="ms2">Use as credenciais criadas no Firebase Authentication</div>
-    <div class="fld">
-      <label class="fl">Email</label>
-      <input class="fi2" id="inU" type="email" placeholder="admin@exemplo.com" onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <div class="fld">
-      <label class="fl">Senha</label>
-      <input class="fi2" id="inP" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
+    <div class="ms2">Use as credenciais do Firebase Authentication</div>
+    <div class="fld"><label class="fl">Email</label><input class="fi2" id="inU" type="email" placeholder="admin@exemplo.com" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="fld"><label class="fl">Senha</label><input class="fi2" id="inP" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div class="me" id="me"></div>
     <button class="bm" id="btnLoginSubmit" onclick="doLogin()">Entrar</button>
   </div>
 </div>
 
 <script>
-// ── Globais acessados pelo módulo Firebase (type=module) ──
-let isAdmin = false;
-window._store = { version:3, period:null, importedAt:null, gtLiq:0, gtPecas:0, kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
-window._goals = { _v3:true, kiosks:{}, sellers:{} };
+// ══════════════════════════════════════════════════════════
+//  GLOBAL STATE
+// ══════════════════════════════════════════════════════════
 
-// Aliases locais — os renders usam essas variáveis
-// O módulo Firebase atualiza window._store e window._goals,
-// aqui criamos getters que sempre apontam para o valor atual
-Object.defineProperty(window, 'store', { get: () => window._store, set: v => { window._store = v; } });
-Object.defineProperty(window, 'goals', { get: () => window._goals, set: v => { window._goals = v; } });
+// Defaults so renders never crash before Firebase loads
+window._store = { period:null, importedAt:null, gtLiq:0, gtPecas:0, kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
+window._goals = { kiosks:{}, sellers:{} };
+// goals.kiosks[kioskName] = {
+//   stdMonthly: number,         // padrão mensal por vendedor (R$)
+//   stdWeekly:  { 'YYYY-MM-DD': number },  // padrão por semana (keyed by Monday)
+//   activeSellers: ['name1','name2'],  // vendedores marcados como ativos
+// }
+// goals.sellers[sellerName] = {
+//   overrideMonthly: { 'YYYY-MM': number },  // override individual (opcional)
+//   overrideWeekly:  { 'YYYY-MM-DD': number },
+// }
 
-// STATUS TOAST
-function showStatus(msg, cls='dim') {
-  const el = document.getElementById('statusBar');
-  el.textContent = msg; el.className = 'show '+(cls||'');
+window._isAdmin = false;
+
+// Proxy getters so all functions always read current state
+Object.defineProperty(window,'store',{get:()=>window._store,set:v=>{window._store=v;}});
+Object.defineProperty(window,'goals',{get:()=>window._goals,set:v=>{window._goals=v;}});
+
+// ── STATUS TOAST ──
+function showStatus(msg,cls='dim'){const el=document.getElementById('statusBar');el.textContent=msg;el.className='show '+(cls||'');}
+function hideStatus(){document.getElementById('statusBar').className='';}
+let _hideTimer=null;
+function toast(msg,cls='ok'){showStatus(msg,cls);clearTimeout(_hideTimer);_hideTimer=setTimeout(hideStatus,3000);}
+
+// ── EMPTY STATE ──
+function showEmptyState(){
+  const empty='<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado encontrado</div><div class="eh">Faça login como admin e importe o relatório CSV</div></div>';
+  document.getElementById('geralBody').innerHTML=empty;
+  document.getElementById('kiosquesBody').innerHTML=empty;
 }
-function hideStatus() { document.getElementById('statusBar').className = ''; }
 
 // ── NAV ──
-function nav(id, btn) {
-  if ((id==='import'||id==='goals') && !isAdmin) { openLogin(); return; }
-  document.querySelectorAll('.pnl').forEach(p => p.classList.remove('on'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+function nav(id,btn){
+  if((id==='import'||id==='goals')&&!window._isAdmin){openLogin();return;}
+  document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.getElementById('pnl-'+id).classList.add('on');
-  if (btn) btn.classList.add('on');
-  if (id==='goals') renderGoals();
+  if(btn) btn.classList.add('on');
+  if(id==='goals') renderGoals();
 }
 
-// ── MODAL ──
-function openLogin() { document.getElementById('ov').classList.add('show'); setTimeout(()=>document.getElementById('inU').focus(),80); }
-function closeLogin(){ document.getElementById('ov').classList.remove('show'); }
-document.getElementById('ov').addEventListener('click', e => { if(e.target===e.currentTarget) closeLogin(); });
-
-async function doLogin() {
-  const email = document.getElementById('inU').value.trim();
-  const pass  = document.getElementById('inP').value;
-  const btn   = document.getElementById('btnLoginSubmit');
-  if (!email||!pass) { document.getElementById('me').textContent='Preencha todos os campos'; return; }
-  btn.disabled=true; btn.textContent='Entrando…';
-  await window._doLogin(email, pass);
-  btn.disabled=false; btn.textContent='Entrar';
+// ── MODAL LOGIN ──
+function openLogin(){document.getElementById('ov').classList.add('show');setTimeout(()=>document.getElementById('inU').focus(),80);}
+function closeLogin(){document.getElementById('ov').classList.remove('show');}
+document.getElementById('ov').addEventListener('click',e=>{if(e.target===e.currentTarget)closeLogin();});
+async function doLogin(){
+  const email=document.getElementById('inU').value.trim();
+  const pass=document.getElementById('inP').value;
+  const btn=document.getElementById('btnLoginSubmit');
+  if(!email||!pass){document.getElementById('me').textContent='Preencha todos os campos';return;}
+  btn.disabled=true;btn.textContent='Entrando…';
+  await window._doLogin(email,pass);
+  btn.disabled=false;btn.textContent='Entrar';
 }
 
 // ── FILE DROP ──
-const dropEl = document.getElementById('drop');
-dropEl.addEventListener('dragover', e=>{e.preventDefault();dropEl.classList.add('over')});
-dropEl.addEventListener('dragleave', ()=>dropEl.classList.remove('over'));
-dropEl.addEventListener('drop', e=>{e.preventDefault();dropEl.classList.remove('over');const f=e.dataTransfer.files[0];if(f)readFile(f)});
-function onFile(e){readFile(e.target.files[0])}
-
+const dropEl=document.getElementById('drop');
+dropEl.addEventListener('dragover',e=>{e.preventDefault();dropEl.classList.add('over');});
+dropEl.addEventListener('dragleave',()=>dropEl.classList.remove('over'));
+dropEl.addEventListener('drop',e=>{e.preventDefault();dropEl.classList.remove('over');const f=e.dataTransfer.files[0];if(f)readFile(f);});
+function onFile(e){readFile(e.target.files[0]);}
 let rawCSV=null;
 function readFile(f){
-  resetLog();
-  log(`📄 ${f.name}  (${(f.size/1024).toFixed(1)} KB)`,'info');
+  resetLog();log(`📄 ${f.name}  (${(f.size/1024).toFixed(1)} KB)`,'info');
   const r=new FileReader();
   r.onload=ev=>{rawCSV=ev.target.result;log(`✓ Lido — ${rawCSV.split('\n').length} linhas brutas`,'ok');preview(rawCSV);document.getElementById('btnProc').disabled=false;};
   r.readAsText(f,'UTF-8');
 }
-function resetLog(){document.getElementById('logbox').innerHTML=''}
+function resetLog(){document.getElementById('logbox').innerHTML='';}
 function log(msg,cls='dim'){const l=document.getElementById('logbox');const d=document.createElement('div');d.className='ll '+cls;d.textContent=msg;l.appendChild(d);l.scrollTop=l.scrollHeight;}
 
-// ── RENDER HELPERS ──
-const R    = v=>'R$\u00a0'+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const sK   = n=>n.replace('QUIOSQUE ','').replace(' SHOPPING','').replace(' PLAZA','').replace(/\s+/g,' ').trim();
-const CLRS = ['rgba(255,255,255,.90)','rgba(255,255,255,.65)','rgba(255,255,255,.42)','rgba(255,255,255,.25)'];
-
+// ══════════════════════════════════════════════════════════
+//  RENDER HELPERS
+// ══════════════════════════════════════════════════════════
+const R=v=>'R$\u00a0'+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const sK=n=>n.replace('QUIOSQUE ','').replace(' SHOPPING','').replace(' PLAZA','').replace(/\s+/g,' ').trim();
+const CLRS=['rgba(255,255,255,.90)','rgba(255,255,255,.65)','rgba(255,255,255,.42)','rgba(255,255,255,.25)'];
 let chartInstances={};
 function destroyChart(id){if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}}
-function goalPct(a,g){return g>0?Math.min((a/g)*100,200):0;}
-function goalBarColor(p){if(p===0)return'var(--border)';if(p>=100)return'var(--success)';if(p>=70)return'#f0a500';return'var(--danger)';}
-function goalBadge(a,g){if(!g)return'';const p=(a/g)*100;if(p>=100)return`<span class="gbadge hit">${p.toFixed(0)}%</span>`;if(p>=70)return`<span class="gbadge warn">${p.toFixed(0)}%</span>`;return`<span class="gbadge miss">${p.toFixed(0)}%</span>`;}
-</script>
 
-<script>
+function gColor(pct){
+  if(pct===0)return'var(--border)';
+  if(pct>=100)return'var(--success)';
+  if(pct>=70)return'#f0a500';
+  return'var(--danger)';
+}
+function gBadge(actual,goal){
+  if(!goal)return'';
+  const p=(actual/goal)*100;
+  const cls=p>=100?'hit':p>=70?'warn':'miss';
+  return`<span class="gbadge ${cls}">${p.toFixed(0)}%</span>`;
+}
+function gBar(actual,goal,opts=''){
+  if(!goal)return`<span style="font-size:.72rem;color:var(--muted)">—</span>`;
+  const p=Math.min((actual/goal)*100,100);
+  return`<div class="gp" ${opts}>
+    <div class="gp-row"><span style="color:var(--muted)">${R(goal)}</span>${gBadge(actual,goal)}</div>
+    <div class="mb"><div class="mf" style="width:${p}%;background:${gColor(p*100/100)}"></div></div>
+  </div>`;
+}
+function gBarWithAccum(actual,goal,accum){
+  if(!goal)return`<span style="font-size:.72rem;color:var(--muted)">—</span>`;
+  const p=Math.min((accum/goal)*100,100);
+  return`<div class="gp">
+    <div class="gp-row"><span style="color:var(--muted)">${R(goal)}</span>${gBadge(accum,goal)}</div>
+    <div class="mb"><div class="mf" style="width:${p}%;background:${gColor(p*100/100)}"></div></div>
+    <div class="gp-meta">${R(accum)} acum.</div>
+  </div>`;
+}
+
 // ══════════════════════════════════════════════════════════
-// CSV PARSER + PROCESSAR + RENDER GERAL + RENDER KIOSQUES
-// + GOALS HELPERS + RENDER GOALS
+//  GOALS HELPERS
 // ══════════════════════════════════════════════════════════
-
-// ── CSV PARSER ──
-// Col mapping (0-indexed):
-//  [9] "Loja :"  [10] kiosk  [11] "Vendedor  :"  [12] seller
-//  [13] TT liq seller  [14] TT desc  [16] TT liq  [18] TT peças  [34] dias
-//  [56] date DD/MM/YY  [60] trans final  [62] trans peças  [63] trans trocas
-//  [77] GT liq total   [80] GT liq   [82] GT peças
-function parseCSVProper(text) {
-  const rows = []; let cur = [], cell = '', inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === '"') { if (inQ && text[i+1] === '"') { cell += '"'; i++; } else inQ = !inQ; }
-    else if (c === ',' && !inQ) { cur.push(cell.trim()); cell = ''; }
-    else if ((c === '\n' || c === '\r') && !inQ) {
-      if (c === '\r' && text[i+1] === '\n') i++;
-      cur.push(cell.trim()); cell = '';
-      if (cur.some(x => x)) rows.push(cur);
-      cur = [];
-    } else { cell += c; }
-  }
-  if (cell || cur.length) { cur.push(cell.trim()); if (cur.some(x => x)) rows.push(cur); }
-  return rows;
-}
-function brNum(s) { if(!s) return 0; const f=parseFloat(s.trim().replace(/\./g,'').replace(',','.')); return isNaN(f)?0:f; }
-function brInt(s) { if(!s) return 0; const i=parseInt(s.trim().replace(/\./g,'').replace(',','.')); return isNaN(i)?0:i; }
-function normalizeDate(s) {
-  if(!s) return '';
-  const m=s.trim().match(/^(\d{2})\/(\d{2})\/(\d{2,4})$/);
-  if(!m) return s.trim();
-  const[,dd,mm,yy]=m; return `${yy.length===2?'20'+yy:yy}-${mm}-${dd}`;
-}
-function fmtDateLabel(s){return(!s||s.length<10)?s:s.substring(8)+'/'+s.substring(5,7);}
-
-function preview(text){
-  if(text.includes('Loja :')||text.includes('VENRES')) log('✓ Formato PDV (VENRES.RPT) detectado','ok');
-  else log('⚠ Formato não reconhecido','warn');
-  const rows=parseCSVProper(text);const ks=new Set(),ss=new Set();
-  for(const r of rows){if(r.length>12&&r[9]?.includes('Loja')){ks.add(r[10]);ss.add(r[12]);}}
-  log(`→ Quiosques: ${ks.size}  ·  Vendedores: ${ss.size}`,ks.size>0?'ok':'warn');
-  const txnCount=(store.txnKeys||[]).length;
-  if(txnCount) log(`→ Transações já armazenadas: ${txnCount} (dedup ativo)`,'dim');
-  log('→ Clique em "Processar" para importar','dim');
-}
-
-// ── PROCESSAR CSV ──
-async function processCSV(){
-  if(!rawCSV) return;
-  log('⟳ Processando…','info');
-  document.getElementById('btnProc').disabled=true;
-
-  const rows=parseCSVProper(rawCSV);
-  const existingKeys=new Set(store.txnKeys||[]);
-  let newTxns=0,dupTxns=0;
-  const kiosks={...store.kiosks};
-  const sellers={...store.sellers};
-  let period=store.period;
-  let gtLiq=store.gtLiq||0,gtPecas=store.gtPecas||0;
-  const allDates=new Set(store.dateRange||[]);
-  const sellerTotals={};
-
-  for(const r of rows){
-    if(!r[9]?.includes('Loja')) continue;
-    const kName=(r[10]||'').replace(/\s+/g,' ').trim();
-    const sName=(r[12]||'').trim();
-    if(!kName||!sName) continue;
-    if(!period&&r[1]) period=(r[1]||'').replace('Período de ','').replace(' Até ',' – ');
-    const _gl=brNum(r[80]),_gp=brInt(r[82]);
-    if(_gl>gtLiq){gtLiq=_gl;gtPecas=_gp;}
-    const stk=kName+'||'+sName;
-    const sLiq=brNum(r[16]),sPecas=brInt(r[18]),sDias=brInt(r[34]),sDesc=brNum(r[14]);
-    if(!sellerTotals[stk]||sLiq>sellerTotals[stk].liq)
-      sellerTotals[stk]={kName,sName,liq:sLiq,pecas:sPecas,dias:sDias,desc:sDesc};
-    const date=normalizeDate(r[56]||'');
-    const tFinal=brNum(r[60]),tPecas=brInt(r[62]),tTroca=brInt(r[63]),tBruto=brNum(r[57]);
-    const txnKey=[kName,sName,date,tBruto.toFixed(2),tFinal.toFixed(2),tPecas].join('|');
-    if(existingKeys.has(txnKey)){dupTxns++;continue;}
-    existingKeys.add(txnKey);newTxns++;
-    if(date) allDates.add(date);
-    if(!kiosks[kName]) kiosks[kName]={name:kName,liq:0,pecas:0,trocas:0,sellers:{},byDate:{}};
-    const K=kiosks[kName];
-    if(!K.sellers[sName]) K.sellers[sName]={name:sName,trocas:0,byDate:{}};
-    if(date){
-      if(!K.byDate[date]) K.byDate[date]={liq:0,pecas:0};
-      K.byDate[date].liq+=tFinal;K.byDate[date].pecas+=tPecas;
-      if(!K.sellers[sName].byDate[date]) K.sellers[sName].byDate[date]={liq:0,pecas:0};
-      K.sellers[sName].byDate[date].liq+=tFinal;K.sellers[sName].byDate[date].pecas+=tPecas;
-      K.sellers[sName].trocas+=tTroca;
-    }
-  }
-  for(const st of Object.values(sellerTotals)){
-    const K=kiosks[st.kName];if(!K) continue;
-    if(!K.sellers[st.sName]) K.sellers[st.sName]={name:st.sName,trocas:0,byDate:{}};
-    Object.assign(K.sellers[st.sName],{liq:st.liq,pecas:st.pecas,dias:st.dias,desc:st.desc});
-  }
-  for(const kn in kiosks){
-    const K=kiosks[kn];K.liq=K.pecas=0;
-    for(const sn in K.sellers){K.liq+=K.sellers[sn].liq||0;K.pecas+=K.sellers[sn].pecas||0;}
-    for(const sn in K.sellers){
-      const S=K.sellers[sn];
-      if(!sellers[sn]||(S.liq||0)>(sellers[sn].liq||0)) sellers[sn]={...S,kiosk:kn};
-    }
-  }
-  const kCount=Object.keys(kiosks).length;
-  if(kCount===0){log('✗ Nenhum quiosque encontrado. Verifique o arquivo.','err');document.getElementById('btnProc').disabled=false;return;}
-
-  window._store={version:3,period,importedAt:new Date().toLocaleString('pt-BR'),
-    gtLiq,gtPecas,kiosks,sellers,txnKeys:Array.from(existingKeys),
-    dateRange:Array.from(allDates).sort()};
-
-  log(`✓ ${kCount} quiosques · ${Object.keys(sellers).length} vendedores`,'ok');
-  log(`✓ Período: ${period||'—'}`,'ok');
-  log(`✓ Novas: ${newTxns}  ·  Ignoradas (duplicatas): ${dupTxns}`,dupTxns>0?'warn':'ok');
-  log('⟳ Salvando no Firebase…','info');
-
-  try {
-    await window.saveStore();
-    log('✓ Publicado no Firebase — visível para todos!','ok');
-    showStatus('Dados publicados ✓','ok');
-    setTimeout(hideStatus,3000);
-  } catch(e) {
-    log('✗ Erro ao salvar: '+e.message,'err');
-  }
-  document.getElementById('btnProc').disabled=false;
-  renderGeral();renderKiosques();
-}
-
-// ── GOAL HELPERS ──
 const MONTH_NAMES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 function monthLabel(ym){const[y,m]=ym.split('-').map(Number);return`${MONTH_NAMES[m-1]} ${y}`;}
 
 function weeksInMonth(year,month){
   const result=[];let d=new Date(year,month-1,1);
-  while(d.getDay()!==1) d=new Date(d.getTime()+86400000);
+  while(d.getDay()!==1)d=new Date(d.getTime()+86400000);
   while(d.getMonth()===month-1){
     const sun=new Date(d.getTime()+6*86400000);
     const monKey=d.toISOString().slice(0,10);
@@ -664,69 +539,211 @@ function availableMonths(){
   (store.dateRange||[]).forEach(d=>set.add(d.slice(0,7)));
   const sorted=[...set].sort();
   if(sorted.length){
-    const last=sorted[sorted.length-1];const[y,m]=last.split('-').map(Number);
+    const[y,m]=sorted[sorted.length-1].split('-').map(Number);
     for(let delta=1;delta<=2;delta++){const nm=m+delta;const ny=y+Math.floor((nm-1)/12);const mm=((nm-1)%12)+1;set.add(`${ny}-${String(mm).padStart(2,'0')}`);}
   }
   if(!set.size){const now=new Date();set.add(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);}
   return[...set].sort();
 }
 
-// Returns week context for last date in data
-function getWeekContext(dateRange){
-  if(!dateRange||!dateRange.length) return null;
-  const lastDate=new Date([...dateRange].sort().slice(-1)[0]+'T00:00:00');
-  const dow=lastDate.getDay();const daysFromMon=dow===0?6:dow-1;
-  const monday=new Date(lastDate);monday.setDate(monday.getDate()-daysFromMon);
-  const sunday=new Date(monday);sunday.setDate(sunday.getDate()+6);
-  const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-  const monKey=monday.toISOString().slice(0,10);
-  return{monday,sunday,monKey,monthKey:monKey.slice(0,7),label:`${fmt(monday)} – ${fmt(sunday)}`};
+// Week context: last date in store.dateRange
+function getWeekCtx(){
+  const dr=store.dateRange||[];
+  if(!dr.length)return null;
+  const lastDate=new Date([...dr].sort().slice(-1)[0]+'T00:00:00');
+  const dow=lastDate.getDay();const dfm=dow===0?6:dow-1;
+  const mon=new Date(lastDate);mon.setDate(mon.getDate()-dfm);
+  const sun=new Date(mon);sun.setDate(sun.getDate()+6);
+  const fmt=dt=>dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  return{monday:mon,sunday:sun,monKey:mon.toISOString().slice(0,10),
+         monthKey:mon.toISOString().slice(0,7),label:`${fmt(mon)} – ${fmt(sun)}`};
 }
 
-function kWeekLiq(kioskName,monday,sunday){
-  const K=store.kiosks[kioskName];if(!K) return 0;
-  let sum=0;
-  for(const[d,v] of Object.entries(K.byDate||{})){const dt=new Date(d+'T00:00:00');if(dt>=monday&&dt<=sunday) sum+=v.liq||0;}
-  return sum;
+function kWeekLiq(kName,mon,sun){
+  const K=store.kiosks[kName];if(!K)return 0;
+  let s=0;
+  for(const[d,v] of Object.entries(K.byDate||{})){const dt=new Date(d+'T00:00:00');if(dt>=mon&&dt<=sun)s+=v.liq||0;}
+  return s;
 }
-function sWeekLiq(kioskName,sellerName,monday,sunday){
-  const S=(store.kiosks[kioskName]||{}).sellers?.[sellerName];if(!S) return 0;
-  let sum=0;
-  for(const[d,v] of Object.entries(S.byDate||{})){const dt=new Date(d+'T00:00:00');if(dt>=monday&&dt<=sunday) sum+=v.liq||0;}
-  return sum;
-}
-
-// Goals accessors
-function getMonthlyGoal(bucket,name,key){return bucket[name]?.monthly?.[key]||0;}
-function getWeeklyGoal(bucket,name,key){return bucket[name]?.weekly?.[key]||0;}
-function getGoalN(kn,period,key){return period==='monthly'?getMonthlyGoal(goals.kiosks,kn,key):getWeeklyGoal(goals.kiosks,kn,key);}
-function kioskGoalValue(kn,period,key){
-  const n=getGoalN(kn,period,key);if(!n) return 0;
-  const K=store.kiosks[kn];if(!K) return 0;
-  const sNames=Object.keys(K.sellers);if(!sNames.length) return 0;
-  const vals=sNames.map(sn=>period==='monthly'?getMonthlyGoal(goals.sellers,sn,key):getWeeklyGoal(goals.sellers,sn,key)).filter(v=>v>0);
-  if(!vals.length) return 0;
-  return (vals.reduce((a,b)=>a+b,0)/vals.length)*n;
+function sWeekLiq(kName,sName,mon,sun){
+  const S=(store.kiosks[kName]||{}).sellers?.[sName];if(!S)return 0;
+  let s=0;
+  for(const[d,v] of Object.entries(S.byDate||{})){const dt=new Date(d+'T00:00:00');if(dt>=mon&&dt<=sun)s+=v.liq||0;}
+  return s;
 }
 
-// ── RENDER GERAL ──
+// ── Goal computation ──────────────────────────────────────
+// Returns list of active sellers for a kiosk
+function activeSellers(kName){
+  const G=goals.kiosks[kName];
+  if(!G?.activeSellers?.length)return[];
+  return G.activeSellers;
+}
+
+// Seller monthly goal: override > stdMonthly of their kiosk
+function sellerMonthGoal(sName,kName,monthKey){
+  // Override individual por mês
+  const ov=goals.sellers[sName]?.overrideMonthly?.[monthKey]||0;
+  if(ov)return ov;
+  // Padrão do quiosque
+  return goals.kiosks[kName]?.stdMonthly||0;
+}
+
+// Seller weekly goal: override > stdWeekly of their kiosk for that week
+function sellerWeekGoal(sName,kName,monKey){
+  const ov=goals.sellers[sName]?.overrideWeekly?.[monKey]||0;
+  if(ov)return ov;
+  return goals.kiosks[kName]?.stdWeekly?.[monKey]||0;
+}
+
+// Kiosk monthly goal = stdMonthly × n° active sellers configured for month
+function kioskMonthGoal(kName,monthKey){
+  const G=goals.kiosks[kName];if(!G)return 0;
+  const std=G.stdMonthly||0;if(!std)return 0;
+  const active=activeSellers(kName);
+  const n=active.length||Object.keys(store.kiosks[kName]?.sellers||{}).length;
+  return std*n;
+}
+
+// Kiosk weekly goal = stdWeekly[monKey] × n° active sellers for that week
+function kioskWeekGoal(kName,monKey){
+  const G=goals.kiosks[kName];if(!G)return 0;
+  const std=G.stdWeekly?.[monKey]||0;if(!std)return 0;
+  const active=activeSellers(kName);
+  const n=active.length||Object.keys(store.kiosks[kName]?.sellers||{}).length;
+  return std*n;
+}
+
+// ══════════════════════════════════════════════════════════
+//  CSV PARSER
+// ══════════════════════════════════════════════════════════
+function parseCSVProper(text){
+  const rows=[];let cur=[],cell='',inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(c==='"'){if(inQ&&text[i+1]==='"'){cell+='"';i++;}else inQ=!inQ;}
+    else if(c===','&&!inQ){cur.push(cell.trim());cell='';}
+    else if((c==='\n'||c==='\r')&&!inQ){
+      if(c==='\r'&&text[i+1]==='\n')i++;
+      cur.push(cell.trim());cell='';
+      if(cur.some(x=>x))rows.push(cur);cur=[];
+    }else{cell+=c;}
+  }
+  if(cell||cur.length){cur.push(cell.trim());if(cur.some(x=>x))rows.push(cur);}
+  return rows;
+}
+function brNum(s){if(!s)return 0;const f=parseFloat(s.trim().replace(/\./g,'').replace(',','.'));return isNaN(f)?0:f;}
+function brInt(s){if(!s)return 0;const i=parseInt(s.trim().replace(/\./g,'').replace(',','.'));return isNaN(i)?0:i;}
+function normDate(s){if(!s)return'';const m=s.trim().match(/^(\d{2})\/(\d{2})\/(\d{2,4})$/);if(!m)return s.trim();const[,dd,mm,yy]=m;return`${yy.length===2?'20'+yy:yy}-${mm}-${dd}`;}
+function fmtDL(s){return(!s||s.length<10)?s:s.slice(8)+'/'+s.slice(5,7);}
+
+function preview(text){
+  if(text.includes('Loja :')||text.includes('VENRES'))log('✓ Formato PDV (VENRES.RPT) detectado','ok');
+  else log('⚠ Formato não reconhecido','warn');
+  const rows=parseCSVProper(text);const ks=new Set(),ss=new Set();
+  for(const r of rows){if(r.length>12&&r[9]?.includes('Loja')){ks.add(r[10]);ss.add(r[12]);}}
+  log(`→ Quiosques: ${ks.size}  ·  Vendedores: ${ss.size}`,ks.size>0?'ok':'warn');
+  const n=(store.txnKeys||[]).length;
+  if(n)log(`→ ${n} transações já armazenadas (dedup ativo)`,'dim');
+  log('→ Clique em "Processar" para importar','dim');
+}
+
+async function processCSV(){
+  if(!rawCSV)return;
+  log('⟳ Processando…','info');
+  document.getElementById('btnProc').disabled=true;
+  const rows=parseCSVProper(rawCSV);
+  const existingKeys=new Set(store.txnKeys||[]);
+  let newTxns=0,dupTxns=0;
+  const kiosks=JSON.parse(JSON.stringify(store.kiosks||{}));
+  const sellers=JSON.parse(JSON.stringify(store.sellers||{}));
+  let period=store.period,gtLiq=store.gtLiq||0,gtPecas=store.gtPecas||0;
+  const allDates=new Set(store.dateRange||[]);
+  const sellerTotals={};
+
+  for(const r of rows){
+    if(!r[9]?.includes('Loja'))continue;
+    const kName=(r[10]||'').replace(/\s+/g,' ').trim();
+    const sName=(r[12]||'').trim();
+    if(!kName||!sName)continue;
+    if(!period&&r[1])period=(r[1]||'').replace('Período de ','').replace(' Até ',' – ');
+    const _gl=brNum(r[80]),_gp=brInt(r[82]);
+    if(_gl>gtLiq){gtLiq=_gl;gtPecas=_gp;}
+    const stk=kName+'||'+sName;
+    const sLiq=brNum(r[16]),sPecas=brInt(r[18]),sDias=brInt(r[34]),sDesc=brNum(r[14]);
+    if(!sellerTotals[stk]||sLiq>sellerTotals[stk].liq)
+      sellerTotals[stk]={kName,sName,liq:sLiq,pecas:sPecas,dias:sDias,desc:sDesc};
+    const date=normDate(r[56]||'');
+    const tFinal=brNum(r[60]),tPecas=brInt(r[62]),tTroca=brInt(r[63]),tBruto=brNum(r[57]);
+    const txnKey=[kName,sName,date,tBruto.toFixed(2),tFinal.toFixed(2),tPecas].join('|');
+    if(existingKeys.has(txnKey)){dupTxns++;continue;}
+    existingKeys.add(txnKey);newTxns++;
+    if(date)allDates.add(date);
+    if(!kiosks[kName])kiosks[kName]={name:kName,liq:0,pecas:0,trocas:0,sellers:{},byDate:{}};
+    const K=kiosks[kName];
+    if(!K.sellers[sName])K.sellers[sName]={name:sName,trocas:0,byDate:{}};
+    if(date){
+      if(!K.byDate[date])K.byDate[date]={liq:0,pecas:0};
+      K.byDate[date].liq+=tFinal;K.byDate[date].pecas+=tPecas;
+      if(!K.sellers[sName].byDate[date])K.sellers[sName].byDate[date]={liq:0,pecas:0};
+      K.sellers[sName].byDate[date].liq+=tFinal;K.sellers[sName].byDate[date].pecas+=tPecas;
+      K.sellers[sName].trocas+=tTroca;
+    }
+  }
+  for(const st of Object.values(sellerTotals)){
+    const K=kiosks[st.kName];if(!K)continue;
+    if(!K.sellers[st.sName])K.sellers[st.sName]={name:st.sName,trocas:0,byDate:{}};
+    Object.assign(K.sellers[st.sName],{liq:st.liq,pecas:st.pecas,dias:st.dias,desc:st.desc});
+  }
+  for(const kn in kiosks){
+    const K=kiosks[kn];K.liq=K.pecas=0;
+    for(const sn in K.sellers){K.liq+=K.sellers[sn].liq||0;K.pecas+=K.sellers[sn].pecas||0;}
+    for(const sn in K.sellers){
+      const S=K.sellers[sn];
+      if(!sellers[sn]||(S.liq||0)>(sellers[sn].liq||0))sellers[sn]={...S,kiosk:kn};
+    }
+  }
+  const kCount=Object.keys(kiosks).length;
+  if(kCount===0){log('✗ Nenhum quiosque encontrado. Verifique o arquivo.','err');document.getElementById('btnProc').disabled=false;return;}
+
+  const newStore={period,importedAt:new Date().toLocaleString('pt-BR'),
+    gtLiq,gtPecas,kiosks,sellers,txnKeys:Array.from(existingKeys),
+    dateRange:Array.from(allDates).sort()};
+
+  log(`✓ ${kCount} quiosques · ${Object.keys(sellers).length} vendedores`,'ok');
+  log(`✓ Novas: ${newTxns}  ·  Duplicatas ignoradas: ${dupTxns}`,dupTxns>0?'warn':'ok');
+  log('⟳ Salvando no Firebase…','info');
+  try{
+    await window.fbSaveStore(newStore);
+    log('✓ Publicado!','ok');
+    toast('Dados publicados ✓');
+  }catch(e){log('✗ Erro: '+e.message,'err');}
+  document.getElementById('btnProc').disabled=false;
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER GERAL
+// ══════════════════════════════════════════════════════════
 function renderGeral(){
   const ks=Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq);
+  if(!ks.length){showEmptyState();return;}
   const tot=store.gtLiq||ks.reduce((s,k)=>s+k.liq,0);
   const totP=store.gtPecas||ks.reduce((s,k)=>s+k.pecas,0);
   const totS=Object.keys(store.sellers).length;
   const tk=totP>0?(tot/totP):0;
-  const wctx=getWeekContext(store.dateRange);
+  const wctx=getWeekCtx();
+  const mKey=wctx?.monthKey||'';
+  const wKey=wctx?.monKey||'';
 
   let h=`<div class="kpi-g">
     <div class="kpi"><div class="kpi-l">Faturamento Líquido</div><div class="kpi-v">${R(tot)}</div><div class="kpi-m">${store.period||'—'}</div></div>
-    <div class="kpi"><div class="kpi-l">Ticket Médio</div><div class="kpi-v">${R(tk)}</div><div class="kpi-m">${totP.toLocaleString('pt-BR')} peças vendidas</div></div>
+    <div class="kpi"><div class="kpi-l">Ticket Médio</div><div class="kpi-v">${R(tk)}</div><div class="kpi-m">${totP.toLocaleString('pt-BR')} peças</div></div>
     <div class="kpi"><div class="kpi-l">Vendedores</div><div class="kpi-v">${totS}</div><div class="kpi-m">${ks.length} quiosques</div></div>
     <div class="kpi"><div class="kpi-l">Semana atual</div><div class="kpi-v" style="font-size:1rem">${wctx?wctx.label:'—'}</div><div class="kpi-m">Seg → Dom</div></div>
   </div>
   <div class="cr">
     <div class="card"><div class="ct">Faturamento Líquido por Quiosque</div><div class="cs">${store.period||'—'}</div><canvas id="cBar" height="160"></canvas></div>
-    <div class="card"><div class="ct">Participação</div><div class="cs">% do faturamento líquido total</div><canvas id="cPie" height="160"></canvas></div>
+    <div class="card"><div class="ct">Participação</div><div class="cs">% do total</div><canvas id="cPie" height="160"></canvas></div>
   </div>`;
 
   // Kiosks table
@@ -734,50 +751,64 @@ function renderGeral(){
     <th>Quiosque</th><th class="num">Faturamento Líquido</th><th class="num">Peças</th><th class="num">Ticket</th>
     <th>Meta Mensal</th>${wctx?'<th>Meta Semanal</th>':''}
   </tr></thead><tbody>`;
-
   ks.forEach(k=>{
-    const sc=Object.keys(k.sellers).length,ktk=k.pecas>0?k.liq/k.pecas:0;
-    const mKey=wctx?.monthKey||'',wKey=wctx?.monKey||'';
-    const nM=getGoalN(k.name,'monthly',mKey),nW=getGoalN(k.name,'weekly',wKey);
-    const gm=kioskGoalValue(k.name,'monthly',mKey),gw=kioskGoalValue(k.name,'weekly',wKey);
-    const pctM=goalPct(k.liq,gm);
+    const sc=Object.keys(k.sellers).length;
+    const ktk=k.pecas>0?k.liq/k.pecas:0;
+    const gm=kioskMonthGoal(k.name,mKey);
+    const gw=kioskWeekGoal(k.name,wKey);
     const wLiq=wctx?kWeekLiq(k.name,wctx.monday,wctx.sunday):0;
-    const pctW=goalPct(wLiq,gw);
     h+=`<tr>
       <td><strong>${sK(k.name)}</strong><br><span style="font-size:.7rem;color:var(--muted)">${sc} vendedores</span></td>
       <td class="mo num">${R(k.liq)}</td><td class="num">${k.pecas.toLocaleString('pt-BR')}</td>
       <td class="mo num">${ktk>0?R(ktk):'—'}</td>
-      <td style="min-width:170px">${gm?`<div style="margin-bottom:4px;display:flex;justify-content:space-between;font-size:.7rem"><span style="color:var(--muted)">${R(gm)} <span style="opacity:.5">(${nM}✕)</span></span>${goalBadge(k.liq,gm)}</div><div class="mb"><div class="mf" style="width:${Math.min(pctM,100)}%;background:${goalBarColor(pctM)}"></div></div>`:'<span style="font-size:.72rem;color:var(--muted)">não configurada</span>'}</td>
-      ${wctx?`<td style="min-width:170px">${gw?`<div style="margin-bottom:4px;display:flex;justify-content:space-between;font-size:.7rem"><span style="color:var(--muted)">${R(gw)} <span style="opacity:.5">(${nW}✕)</span></span>${goalBadge(wLiq,gw)}</div><div class="mb"><div class="mf" style="width:${Math.min(pctW,100)}%;background:${goalBarColor(pctW)}"></div></div><div style="font-size:.68rem;color:var(--muted);margin-top:3px">${R(wLiq)} acum.</div>`:'<span style="font-size:.72rem;color:var(--muted)">não configurada</span>'}</td>`:''}
+      <td>${gBar(k.liq,gm)}</td>
+      ${wctx?`<td>${gBarWithAccum(wLiq,gw,wLiq)}</td>`:''}
     </tr>`;
   });
   h+=`</tbody></table></div>`;
 
-  // Sellers table
-  const sl=Object.values(store.sellers).sort((a,b)=>b.liq-a.liq);
+  // Sellers table — only active sellers, inactive shown faded
+  const allSellers=Object.values(store.sellers).sort((a,b)=>b.liq-a.liq);
   h+=`<div class="h2">Vendedores</div><div class="tw tw-scroll"><table><thead><tr>
-    <th>#</th><th>Vendedor</th><th>Quiosque</th><th class="num">Faturamento Líquido</th>
-    <th class="num">Peças</th><th class="num">Dias</th><th class="num">Ticket</th>
+    <th>#</th><th>Vendedor</th><th>Quiosque</th>
+    <th class="num">Faturamento Líquido</th><th class="num">Peças</th><th class="num">Dias</th><th class="num">Ticket</th>
     <th>Meta Mensal</th>${wctx?'<th>Meta Semanal</th>':''}
   </tr></thead><tbody>`;
-  sl.forEach((s,i)=>{
+  let rank=0;
+  allSellers.forEach(s=>{
+    const kName=s.kiosk||'';
+    const isActive=activeSellers(kName).includes(s.name);
+    // if no sellers configured yet, show all; once configured, active ones ranked
+    const configured=activeSellers(kName).length>0;
+    if(configured&&!isActive){
+      // Show inactive faded at bottom
+      const tk2=(s.pecas||0)>0?(s.liq||0)/s.pecas:0;
+      h+=`<tr class="inactive"><td class="rank-num">—</td><td>${s.name}<span class="tag-inactive">inativo</span></td>
+        <td style="font-size:.8rem;color:var(--muted)">${sK(kName)}</td>
+        <td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td>
+        <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
+        <td>—</td>${wctx?'<td>—</td>':''}
+      </tr>`;
+      return;
+    }
+    rank++;
     const tk2=(s.pecas||0)>0?(s.liq||0)/s.pecas:0;
-    const mKey=wctx?.monthKey||'',wKey=wctx?.monKey||'';
-    const gm=getMonthlyGoal(goals.sellers,s.name,mKey),gw=getWeeklyGoal(goals.sellers,s.name,wKey);
-    const pctM=goalPct(s.liq||0,gm);
-    const wLiq=wctx?sWeekLiq(s.kiosk,s.name,wctx.monday,wctx.sunday):0;
-    const pctW=goalPct(wLiq,gw);
+    const gm=sellerMonthGoal(s.name,kName,mKey);
+    const gw=sellerWeekGoal(s.name,kName,wKey);
+    const wLiq=wctx?sWeekLiq(kName,s.name,wctx.monday,wctx.sunday):0;
     h+=`<tr>
-      <td class="rank-num">${i+1}</td><td><strong>${s.name}</strong></td>
-      <td style="color:var(--muted);font-size:.8rem">${sK(s.kiosk||'')}</td>
+      <td class="rank-num">${rank}</td>
+      <td><strong>${s.name}</strong></td>
+      <td style="color:var(--muted);font-size:.8rem">${sK(kName)}</td>
       <td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td>
       <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
-      <td style="min-width:150px">${gm?`<div style="margin-bottom:4px;display:flex;justify-content:space-between;font-size:.7rem"><span style="color:var(--muted)">${R(gm)}</span>${goalBadge(s.liq||0,gm)}</div><div class="mb"><div class="mf" style="width:${Math.min(pctM,100)}%;background:${goalBarColor(pctM)}"></div></div>`:'<span style="font-size:.72rem;color:var(--muted)">—</span>'}</td>
-      ${wctx?`<td style="min-width:150px">${gw?`<div style="margin-bottom:4px;display:flex;justify-content:space-between;font-size:.7rem"><span style="color:var(--muted)">${R(gw)}</span>${goalBadge(wLiq,gw)}</div><div class="mb"><div class="mf" style="width:${Math.min(pctW,100)}%;background:${goalBarColor(pctW)}"></div></div><div style="font-size:.68rem;color:var(--muted);margin-top:3px">${R(wLiq)} acum.</div>`:'<span style="font-size:.72rem;color:var(--muted)">—</span>'}</td>`:''}
+      <td>${gBar(s.liq||0,gm)}</td>
+      ${wctx?`<td>${gBarWithAccum(wLiq,gw,wLiq)}</td>`:''}
     </tr>`;
   });
   h+=`</tbody></table></div>`;
   h+=`<div class="meta-line">Importado em ${store.importedAt||'—'}</div>`;
+
   document.getElementById('geralBody').innerHTML=h;
   destroyChart('cBar');destroyChart('cPie');
   setTimeout(()=>{
@@ -787,158 +818,335 @@ function renderGeral(){
   },80);
 }
 
-// ── RENDER KIOSQUES ──
+// ══════════════════════════════════════════════════════════
+//  RENDER KIOSQUES
+// ══════════════════════════════════════════════════════════
 function renderKiosques(){
   const ks=Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq);
-  const wctx=getWeekContext(store.dateRange);
+  if(!ks.length){document.getElementById('kiosquesBody').innerHTML='<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado</div></div>';return;}
+  const wctx=getWeekCtx();
+  const mKey=wctx?.monthKey||'';
+  const wKey=wctx?.monKey||'';
   let h='<div class="kg">';
   ks.forEach((k,ki)=>{
     const sls=Object.values(k.sellers).sort((a,b)=>(b.liq||0)-(a.liq||0));
     const tk=k.pecas>0?k.liq/k.pecas:0;
     const dates=Object.keys(k.byDate).sort();
-    const mKey=wctx?.monthKey||'',wKey=wctx?.monKey||'';
-    const gm=kioskGoalValue(k.name,'monthly',mKey),gw=kioskGoalValue(k.name,'weekly',wKey);
-    const nM=getGoalN(k.name,'monthly',mKey),nW=getGoalN(k.name,'weekly',wKey);
-    const pctM=goalPct(k.liq,gm);
+    const gm=kioskMonthGoal(k.name,mKey);
+    const gw=kioskWeekGoal(k.name,wKey);
     const wLiq=wctx?kWeekLiq(k.name,wctx.monday,wctx.sunday):0;
-    const pctW=goalPct(wLiq,gw);
+    const pM=(gm>0)?Math.min((k.liq/gm)*100,100):0;
+    const pW=(gw>0)?Math.min((wLiq/gw)*100,100):0;
+
     h+=`<div class="kc"><div class="kch"><div><div class="kcn">${sK(k.name)}</div><div class="kct">${k.name}</div></div><div class="ktot"><div class="ktl">Faturamento Líquido</div><div class="ktv">${R(k.liq)}</div></div></div>`;
-    if(gm||gw){h+=`<div class="kgoal">`;
-      if(gm) h+=`<div class="kgoal-item"><div class="kgoal-lbl">Meta Mensal <span style="opacity:.5">${nM} vend.</span></div><div class="kgoal-row"><span class="kgoal-val">${R(k.liq)}</span><span class="kgoal-pct" style="color:${goalBarColor(pctM)}">${pctM.toFixed(0)}%</span></div><div style="font-size:.68rem;color:var(--muted);margin-bottom:5px">de ${R(gm)}</div><div class="kgoal-bar"><div class="kgoal-fill" style="width:${Math.min(pctM,100)}%;background:${goalBarColor(pctM)}"></div></div></div>`;
-      if(gw&&wctx) h+=`<div class="kgoal-item"><div class="kgoal-lbl">Semana · ${wctx.label} <span style="opacity:.5">${nW}✕</span></div><div class="kgoal-row"><span class="kgoal-val">${R(wLiq)}</span><span class="kgoal-pct" style="color:${goalBarColor(pctW)}">${pctW.toFixed(0)}%</span></div><div style="font-size:.68rem;color:var(--muted);margin-bottom:5px">de ${R(gw)}</div><div class="kgoal-bar"><div class="kgoal-fill" style="width:${Math.min(pctW,100)}%;background:${goalBarColor(pctW)}"></div></div></div>`;
+    if(gm||gw){
+      h+=`<div class="kgoal">`;
+      if(gm)h+=`<div class="kgoal-item"><div class="kgoal-lbl">Meta Mensal</div><div class="kgoal-row"><span class="kgoal-val">${R(k.liq)}</span><span class="kgoal-pct" style="color:${gColor(pM)}">${pM.toFixed(0)}%</span></div><div style="font-size:.68rem;color:var(--muted);margin-bottom:5px">de ${R(gm)}</div><div class="kgoal-bar"><div class="kgoal-fill" style="width:${pM}%;background:${gColor(pM)}"></div></div></div>`;
+      if(gw&&wctx)h+=`<div class="kgoal-item"><div class="kgoal-lbl">Semana · ${wctx.label}</div><div class="kgoal-row"><span class="kgoal-val">${R(wLiq)}</span><span class="kgoal-pct" style="color:${gColor(pW)}">${pW.toFixed(0)}%</span></div><div style="font-size:.68rem;color:var(--muted);margin-bottom:5px">de ${R(gw)}</div><div class="kgoal-bar"><div class="kgoal-fill" style="width:${pW}%;background:${gColor(pW)}"></div></div></div>`;
       h+=`</div>`;
     }
     h+=`<div class="ms-g"><div class="ms"><div class="ms-l">Peças</div><div class="ms-v">${k.pecas.toLocaleString('pt-BR')}</div><div class="ms-s">vendidas</div></div><div class="ms"><div class="ms-l">Ticket</div><div class="ms-v">${tk>0?R(tk):'—'}</div><div class="ms-s">${sls.length} vendedores</div></div><div class="ms"><div class="ms-l">Semana</div><div class="ms-v">${wctx?R(wLiq):'—'}</div><div class="ms-s">${wctx?wctx.label:'—'}</div></div></div>`;
     h+=`<div class="sd">Vendedores</div><div class="tw tw-scroll" style="margin:0"><table><thead><tr><th>Vendedor</th><th class="num">Líquido</th><th class="num">Peças</th><th class="num">Dias</th><th class="num">Ticket</th><th>Meta Mensal</th>${wctx?'<th>Meta Semanal</th>':''}</tr></thead><tbody>`;
     sls.forEach((s,si)=>{
+      const kName=k.name;
+      const configured=activeSellers(kName).length>0;
+      const isActive=!configured||activeSellers(kName).includes(s.name);
       const tk2=(s.pecas||0)>0?(s.liq||0)/s.pecas:0;
-      const sgm=getMonthlyGoal(goals.sellers,s.name,mKey),sgw=getWeeklyGoal(goals.sellers,s.name,wKey);
-      const spM=goalPct(s.liq||0,sgm);
-      const swL=wctx?sWeekLiq(k.name,s.name,wctx.monday,wctx.sunday):0;
-      const spW=goalPct(swL,sgw);
-      h+=`<tr><td>${si===0?'<span class="star">★</span>':''}<strong>${s.name}</strong></td><td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td><td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
-        <td style="min-width:140px">${sgm?`<div style="font-size:.7rem;display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:var(--muted)">${R(sgm)}</span>${goalBadge(s.liq||0,sgm)}</div><div class="mb" style="margin:0"><div class="mf" style="width:${Math.min(spM,100)}%;background:${goalBarColor(spM)}"></div></div>`:'<span style="font-size:.72rem;color:var(--muted)">—</span>'}</td>
-        ${wctx?`<td style="min-width:140px">${sgw?`<div style="font-size:.7rem;display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:var(--muted)">${R(sgw)}</span>${goalBadge(swL,sgw)}</div><div class="mb" style="margin:0"><div class="mf" style="width:${Math.min(spW,100)}%;background:${goalBarColor(spW)}"></div></div><div style="font-size:.68rem;color:var(--muted);margin-top:3px">${R(swL)}</div>`:'<span style="font-size:.72rem;color:var(--muted)">—</span>'}</td>`:''}
+      const sgm=sellerMonthGoal(s.name,kName,mKey);
+      const sgw=sellerWeekGoal(s.name,kName,wKey);
+      const swL=wctx?sWeekLiq(kName,s.name,wctx.monday,wctx.sunday):0;
+      h+=`<tr${!isActive?' class="inactive"':''}>
+        <td>${si===0&&isActive?'<span class="star">★</span>':''}<strong>${s.name}</strong>${!isActive?'<span class="tag-inactive">inativo</span>':''}</td>
+        <td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td>
+        <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
+        <td>${isActive?gBar(s.liq||0,sgm):'—'}</td>
+        ${wctx?`<td>${isActive?gBarWithAccum(swL,sgw,swL):'—'}</td>`:''}
       </tr>`;
     });
     h+=`</tbody></table></div>`;
-    if(dates.length>1) h+=`<div class="kcc"><div class="kcc-l">Faturamento Líquido Diário</div><canvas id="cd${ki}" height="70"></canvas></div>`;
+    if(dates.length>1)h+=`<div class="kcc"><div class="kcc-l">Faturamento Líquido Diário</div><canvas id="cd${ki}" height="70"></canvas></div>`;
     h+=`</div>`;
   });
   h+=`</div>`;
   document.getElementById('kiosquesBody').innerHTML=h;
   setTimeout(()=>{
     ks.forEach((k,ki)=>{
-      const cv=document.getElementById('cd'+ki);if(!cv) return;
+      const cv=document.getElementById('cd'+ki);if(!cv)return;
       destroyChart('cd'+ki);
       const dates=Object.keys(k.byDate).sort();
       const vals=dates.map(d=>k.byDate[d].liq);
-      chartInstances['cd'+ki]=new Chart(cv,{type:'line',data:{labels:dates.map(fmtDateLabel),datasets:[{data:vals,borderColor:'#ffffff',backgroundColor:'rgba(255,255,255,.04)',tension:.35,fill:true,pointRadius:2,borderWidth:1.5}]},options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#666',font:{family:'DM Mono',size:9},maxTicksLimit:8}},y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}}}});
+      chartInstances['cd'+ki]=new Chart(cv,{type:'line',data:{labels:dates.map(fmtDL),datasets:[{data:vals,borderColor:'#fff',backgroundColor:'rgba(255,255,255,.04)',tension:.35,fill:true,pointRadius:2,borderWidth:1.5}]},options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#666',font:{family:'DM Mono',size:9},maxTicksLimit:8}},y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}}}});
     });
   },100);
 }
 
-// ── GOALS CONFIG ──
-let goalsSelectedMonth=null;
+// ══════════════════════════════════════════════════════════
+//  RENDER GOALS CONFIG
+// ══════════════════════════════════════════════════════════
+let goalsSelMonth=null;
 function initGoalsMonth(){
-  if(goalsSelectedMonth) return;
+  if(goalsSelMonth)return;
   const months=availableMonths();
-  const dataMonths=(store.dateRange||[]).map(d=>d.slice(0,7)).sort();
-  goalsSelectedMonth=dataMonths[dataMonths.length-1]||months[months.length-1]||months[0];
+  const dm=(store.dateRange||[]).map(d=>d.slice(0,7)).sort();
+  goalsSelMonth=dm[dm.length-1]||months[months.length-1]||months[0];
 }
-function selectGoalsMonth(ym){goalsSelectedMonth=ym;renderGoals();}
+function selectGoalsMonth(ym){goalsSelMonth=ym;renderGoals();}
 
 function renderGoals(){
   const ks=Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq);
   initGoalsMonth();
   const months=availableMonths();
-  const[yr,mo]=goalsSelectedMonth.split('-').map(Number);
+  const monthKey=goalsSelMonth;
+  const[yr,mo]=monthKey.split('-').map(Number);
   const weeks=weeksInMonth(yr,mo);
-  const monthKey=goalsSelectedMonth;
 
   let h=`<div class="goals-month-bar">`;
   months.forEach(m=>h+=`<button class="goals-month-btn${m===monthKey?' on':''}" onclick="selectGoalsMonth('${m}')">${monthLabel(m)}</button>`);
-  h+=`</div><div class="goals-grid">`;
-
-  // LEFT — Quiosques (n° vendedores ideal)
-  h+=`<div class="goals-card"><div class="goals-card-title">Quiosques</div>
-    <div class="goals-card-sub">${monthLabel(monthKey)} · n° de vendedores ideal</div>
-    <div class="goals-card-hint">A meta do quiosque é calculada automaticamente: <strong>n° vendedores ideal × média das metas individuais</strong></div>`;
-
-  if(!ks.length){h+=`<div style="font-size:.8rem;color:var(--muted);padding:16px 0">Importe um relatório para configurar metas.</div>`;}
-  else{ks.forEach(k=>{
-    const kn=k.name,sc=Object.keys(k.sellers).length;
-    const nMonth=getGoalN(kn,'monthly',monthKey);
-    const gmCalc=kioskGoalValue(kn,'monthly',monthKey);
-    h+=`<div class="goal-entity"><div class="goal-entity-head"><div><div class="goal-name">${sK(kn)}</div><div class="goal-sub">${sc} vendedores ativos${gmCalc?` · meta calculada ${R(gmCalc)}`:''}</div></div></div><div class="goal-weeks">`;
-    h+=`<div class="goal-week-row"><span class="goal-week-lbl">Mensal <span style="color:var(--muted)">${monthLabel(monthKey)}</span></span><div style="display:flex;align-items:center;gap:6px"><input class="goal-inp goal-inp-sm" type="number" min="0" step="1" value="${nMonth||''}" placeholder="0" oninput="setGoal('kiosk','monthly',${JSON.stringify(kn)},'${monthKey}',this.value)"><span style="font-size:.68rem;color:var(--muted)">vend.</span></div></div>`;
-    weeks.forEach((w,wi)=>{
-      const nw=getGoalN(kn,'weekly',w.monKey);
-      const gwCalc=kioskGoalValue(kn,'weekly',w.monKey);
-      h+=`<div class="goal-week-row"><span class="goal-week-lbl">S${wi+1} <span style="color:var(--muted)">${w.label}${w.crossMonth?' ↗':''}</span>${gwCalc?`<span style="font-family:var(--mono);font-size:.65rem;color:var(--muted);margin-left:6px">= ${R(gwCalc)}</span>`:''}</span><div style="display:flex;align-items:center;gap:6px"><input class="goal-inp goal-inp-sm" type="number" min="0" step="1" value="${nw||''}" placeholder="0" oninput="setGoal('kiosk','weekly',${JSON.stringify(kn)},'${w.monKey}',this.value)"><span style="font-size:.68rem;color:var(--muted)">vend.</span></div></div>`;
-    });
-    h+=`</div></div>`;
-  });}
   h+=`</div>`;
 
-  // RIGHT — Vendedores (valores monetários)
-  h+=`<div class="goals-card"><div class="goals-card-title">Vendedores</div><div class="goals-card-sub">${monthLabel(monthKey)} · faturamento líquido individual</div>`;
-  if(!ks.length){h+=`<div style="font-size:.8rem;color:var(--muted);padding:16px 0">Importe um relatório para configurar metas.</div>`;}
-  else{ks.forEach(k=>{
-    const sls=Object.values(k.sellers).sort((a,b)=>(b.liq||0)-(a.liq||0));
-    h+=`<div class="goal-kiosk-header">${sK(k.name)}</div>`;
-    sls.forEach(s=>{
-      const sn=s.name;
-      const gMonth=getMonthlyGoal(goals.sellers,sn,monthKey);
-      h+=`<div class="goal-entity"><div class="goal-entity-head"><div><div class="goal-name">${sn}</div><div class="goal-sub" style="font-family:var(--mono);font-size:.68rem">${R(s.liq||0)} líq.</div></div><div class="goal-inp-wrap" style="width:120px"><span class="goal-inp-lbl">Meta Mensal</span><input class="goal-inp" type="number" min="0" step="500" value="${gMonth||''}" placeholder="0" oninput="setGoal('seller','monthly',${JSON.stringify(sn)},'${monthKey}',this.value)"></div></div><div class="goal-weeks">`;
-      weeks.forEach((w,wi)=>{
-        const gw=getWeeklyGoal(goals.sellers,sn,w.monKey);
-        h+=`<div class="goal-week-row"><span class="goal-week-lbl">S${wi+1} <span style="color:var(--muted)">${w.label}${w.crossMonth?' ↗':''}</span></span><input class="goal-inp goal-inp-sm" type="number" min="0" step="200" value="${gw||''}" placeholder="0" oninput="setGoal('seller','weekly',${JSON.stringify(sn)},'${w.monKey}',this.value)"></div>`;
-      });
-      h+=`</div></div>`;
-    });
-  });}
-  h+=`</div></div>`;
+  if(!ks.length){
+    h+=`<div class="empty"><div class="ei">○</div><div class="et">Importe um relatório primeiro</div></div>`;
+    document.getElementById('goalsBody').innerHTML=h;return;
+  }
 
-  h+=`<div class="goals-actions"><button class="btn-primary" onclick="saveAllGoals()">Salvar metas</button><button class="btn-secondary" onclick="clearMonthGoals()">Limpar mês</button><span class="save-notice" id="saveNotice">✓ Salvo no Firebase</span></div>`;
+  h+=`<div class="goals-grid">`;
+
+  // ── LEFT: Kiosk goal config (one block per kiosk) ──
+  h+=`<div class="goals-card">
+    <div class="goals-card-title">Quiosques</div>
+    <div class="goals-card-sub">${monthLabel(monthKey)} · padrão por vendedor</div>
+    <div class="goals-card-hint">
+      Configure a <strong>meta padrão por vendedor</strong> e os <strong>vendedores ativos</strong>.<br>
+      Meta do quiosque = padrão × n° ativos. Vendedores inativos ficam ocultos nos rankings.
+    </div>`;
+
+  ks.forEach(k=>{
+    const kn=k.name;
+    const G=goals.kiosks[kn]||{};
+    const std=G.stdMonthly||'';
+    const active=G.activeSellers||[];
+    const allS=Object.values(k.sellers).sort((a,b)=>(b.liq||0)-(a.liq||0));
+    const nActive=active.length||allS.length;
+    const monthCalc=(G.stdMonthly||0)*nActive;
+    const wkCalc=week=>(G.stdWeekly?.[week.monKey]||0)*nActive;
+
+    h+=`<div class="gk-block">
+      <div class="gk-head">
+        <div>
+          <div class="gk-name">${sK(kn)}</div>
+          <div class="gk-sub">${nActive} vend. ativos${monthCalc?` · meta mês ${R(monthCalc)}`:' · configure abaixo'}</div>
+        </div>
+      </div>
+
+      <div class="gk-std">
+        <div class="gk-std-item">
+          <span class="gk-lbl">Padrão Mensal por Vendedor</span>
+          <div class="gk-inp-row">
+            <input class="gk-inp" type="number" min="0" step="500"
+              value="${std}" placeholder="0"
+              oninput="setKioskStd(${JSON.stringify(kn)},'stdMonthly',this.value)">
+            <span class="gk-unit">/ vend.</span>
+          </div>
+          ${monthCalc?`<div style="font-size:.68rem;color:var(--muted);margin-top:3px">Total: ${R(monthCalc)}</div>`:''}
+        </div>
+      </div>
+
+      <div class="gk-sellers-lbl">Vendedores — ativo/inativo</div>
+      <div class="seller-toggle-list">`;
+
+    allS.forEach(s=>{
+      const isActive=active.length===0||active.includes(s.name);
+      h+=`<div class="seller-toggle${isActive?' active':''}" onclick="toggleSeller(${JSON.stringify(kn)},${JSON.stringify(s.name)})">
+        <div>
+          <div class="seller-toggle-name">${s.name}</div>
+          <div class="seller-toggle-liq">${R(s.liq||0)}</div>
+        </div>
+        <div class="seller-toggle-switch"></div>
+      </div>`;
+    });
+
+    h+=`</div>`;
+
+    // Weekly breakdown
+    h+=`<div class="gk-weeks"><div class="gk-week-lbl">Padrão Semanal por Vendedor</div>`;
+    weeks.forEach((w,wi)=>{
+      const wStd=G.stdWeekly?.[w.monKey]||'';
+      const wCalc=wkCalc(w);
+      h+=`<div class="gk-week-row">
+        <span class="gk-week-label">S${wi+1} <span style="color:var(--muted)">${w.label}${w.crossMonth?' ↗':''}</span></span>
+        <div class="gk-week-right">
+          ${wCalc?`<span class="gk-week-calc">= ${R(wCalc)}</span>`:''}
+          <input class="gk-inp" type="number" min="0" step="200" style="width:90px"
+            value="${wStd}" placeholder="0"
+            oninput="setKioskStdWeek(${JSON.stringify(kn)},'${w.monKey}',this.value)">
+          <span class="gk-unit">/ vend.</span>
+        </div>
+      </div>`;
+    });
+    h+=`</div>`;
+
+    h+=`</div>`;  // gk-block
+  });
+  h+=`</div>`;  // goals-card
+
+  // ── RIGHT: Individual overrides per seller ──
+  h+=`<div class="goals-card">
+    <div class="goals-card-title">Ajustes Individuais</div>
+    <div class="goals-card-sub">${monthLabel(monthKey)} · sobrescreve o padrão do quiosque</div>
+    <div class="goals-card-hint">Opcional. Deixe em branco para usar o padrão do quiosque.</div>`;
+
+  ks.forEach(k=>{
+    const active=goals.kiosks[k.name]?.activeSellers||[];
+    const allS=Object.values(k.sellers).sort((a,b)=>(b.liq||0)-(a.liq||0));
+    const visibleSellers=active.length>0?allS.filter(s=>active.includes(s.name)):allS;
+    if(!visibleSellers.length)return;
+
+    h+=`<div class="goal-kiosk-section"><div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">${sK(k.name)}</div>`;
+    visibleSellers.forEach(s=>{
+      const ov=goals.sellers[s.name]||{};
+      const ovM=ov.overrideMonthly?.[monthKey]||'';
+      h+=`<div class="gk-override-row">
+        <span class="gk-override-name">${s.name}</span>
+        <div class="gk-override-inputs">
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span class="gk-lbl">Mensal</span>
+            <input class="gk-inp" type="number" min="0" step="500" style="width:100px"
+              value="${ovM}" placeholder="padrão"
+              oninput="setSellerOverride(${JSON.stringify(s.name)},'overrideMonthly','${monthKey}',this.value)">
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;padding-left:0;margin-bottom:8px">`;
+      weeks.forEach((w,wi)=>{
+        const ovW=ov.overrideWeekly?.[w.monKey]||'';
+        h+=`<div class="gk-week-row" style="padding:3px 0">
+          <span class="gk-week-label" style="font-size:.75rem">S${wi+1} <span style="color:var(--muted)">${w.label}</span></span>
+          <input class="gk-inp" type="number" min="0" step="200" style="width:90px"
+            value="${ovW}" placeholder="padrão"
+            oninput="setSellerOverride(${JSON.stringify(s.name)},'overrideWeekly','${w.monKey}',this.value)">
+        </div>`;
+      });
+      h+=`</div>`;
+    });
+    h+=`</div>`;
+  });
+  h+=`</div></div>`;  // goals-card + goals-grid
+
+  h+=`<div class="goals-actions">
+    <button class="btn-primary" onclick="saveAllGoals()">Salvar metas</button>
+    <button class="btn-secondary" onclick="clearMonthGoals()">Limpar mês</button>
+    <span class="save-notice" id="saveNotice">✓ Salvo no Firebase</span>
+  </div>`;
+
   document.getElementById('goalsBody').innerHTML=h;
 }
 
-function setGoal(type,period,name,key,val){
-  const v=parseFloat(val)||0;
-  const bucket=type==='kiosk'?goals.kiosks:goals.sellers;
-  if(!bucket[name]) bucket[name]={monthly:{},weekly:{}};
-  if(!bucket[name].monthly) bucket[name].monthly={};
-  if(!bucket[name].weekly)  bucket[name].weekly={};
-  bucket[name][period][key]=v;
-  // Live preview: re-render quiosques card hints without full re-render
-  const mn=goalsSelectedMonth;
-  document.querySelectorAll('.goal-sub').forEach(el=>{
-    const txt=el.textContent;
-    if(txt.includes('meta calculada')||txt.includes('vendedores ativos')){
-      // Will refresh on save
+// ── Goals setters ──────────────────────────────────────────
+function ensureKiosk(kn){
+  if(!goals.kiosks[kn])goals.kiosks[kn]={stdMonthly:0,stdWeekly:{},activeSellers:[]};
+  if(!goals.kiosks[kn].stdWeekly)goals.kiosks[kn].stdWeekly={};
+  if(!goals.kiosks[kn].activeSellers)goals.kiosks[kn].activeSellers=[];
+}
+function ensureSeller(sn){
+  if(!goals.sellers[sn])goals.sellers[sn]={overrideMonthly:{},overrideWeekly:{}};
+  if(!goals.sellers[sn].overrideMonthly)goals.sellers[sn].overrideMonthly={};
+  if(!goals.sellers[sn].overrideWeekly)goals.sellers[sn].overrideWeekly={};
+}
+
+function setKioskStd(kn,field,val){
+  ensureKiosk(kn);
+  goals.kiosks[kn][field]=parseFloat(val)||0;
+  // Live update derived label
+  const nActive=goals.kiosks[kn].activeSellers.length||Object.keys(store.kiosks[kn]?.sellers||{}).length;
+  const calc=(goals.kiosks[kn].stdMonthly||0)*nActive;
+  // Find the sub-label in DOM and update
+  const blocks=document.querySelectorAll('.gk-block');
+  blocks.forEach(b=>{
+    if(b.querySelector('.gk-name')?.textContent===sK(kn)){
+      const sub=b.querySelector('.gk-sub');
+      if(sub)sub.textContent=`${nActive} vend. ativos${calc?' · meta mês '+R(calc):' · configure abaixo'}`;
+      const derived=b.querySelector('div[style*="color:var(--muted)"]');
+      if(derived&&calc)derived.textContent='Total: '+R(calc);
     }
   });
 }
 
+function setKioskStdWeek(kn,monKey,val){
+  ensureKiosk(kn);
+  goals.kiosks[kn].stdWeekly[monKey]=parseFloat(val)||0;
+  const nActive=goals.kiosks[kn].activeSellers.length||Object.keys(store.kiosks[kn]?.sellers||{}).length;
+  const calc=(goals.kiosks[kn].stdWeekly[monKey]||0)*nActive;
+  // Update calc label in DOM
+  const rows=document.querySelectorAll('.gk-week-right');
+  rows.forEach(row=>{
+    const inp=row.querySelector('input');
+    if(inp&&inp.getAttribute('oninput')?.includes(JSON.stringify(monKey))&&
+       inp.closest('.gk-block')?.querySelector('.gk-name')?.textContent===sK(kn)){
+      let calc_el=row.querySelector('.gk-week-calc');
+      if(!calc_el&&calc){calc_el=document.createElement('span');calc_el.className='gk-week-calc';row.insertBefore(calc_el,inp);}
+      if(calc_el)calc_el.textContent=calc?'= '+R(calc):'';
+    }
+  });
+}
+
+function toggleSeller(kn,sName){
+  ensureKiosk(kn);
+  const K=store.kiosks[kn];
+  const allSellers=Object.keys(K?.sellers||{});
+  let active=goals.kiosks[kn].activeSellers;
+  // If empty (none configured yet) = all are active; init with all minus this one
+  if(active.length===0)active=goals.kiosks[kn].activeSellers=[...allSellers];
+  const idx=active.indexOf(sName);
+  if(idx>=0)active.splice(idx,1);
+  else active.push(sName);
+  // Update toggle UI without full re-render
+  const toggles=document.querySelectorAll('.seller-toggle');
+  toggles.forEach(t=>{
+    if(t.querySelector('.seller-toggle-name')?.textContent===sName&&
+       t.closest('.gk-block')?.querySelector('.gk-name')?.textContent===sK(kn)){
+      t.classList.toggle('active',active.includes(sName));
+    }
+  });
+  // Update sub count
+  const nActive=active.length;
+  const calc=(goals.kiosks[kn].stdMonthly||0)*nActive;
+  const blocks=document.querySelectorAll('.gk-block');
+  blocks.forEach(b=>{
+    if(b.querySelector('.gk-name')?.textContent===sK(kn)){
+      const sub=b.querySelector('.gk-sub');
+      if(sub)sub.textContent=`${nActive} vend. ativos${calc?' · meta mês '+R(calc):' · configure abaixo'}`;
+    }
+  });
+}
+
+function setSellerOverride(sn,field,key,val){
+  ensureSeller(sn);
+  goals.sellers[sn][field][key]=parseFloat(val)||0;
+}
+
 async function saveAllGoals(){
   showStatus('Salvando…','dim');
-  try {
-    await window.saveGoals();
-    if(Object.keys(store.kiosks).length){renderGeral();renderKiosques();}
+  try{
+    await window.fbSaveGoals(JSON.parse(JSON.stringify(goals)));
+    renderGeral();renderKiosques();
     const n=document.getElementById('saveNotice');
     if(n){n.classList.add('show');setTimeout(()=>n.classList.remove('show'),2500);}
     hideStatus();
-  } catch(e) { /* already shown by saveGoals */ }
+  }catch(e){showStatus('Erro: '+e.message,'err');}
 }
 
 function clearMonthGoals(){
-  if(!confirm(`Limpar todas as metas de ${monthLabel(goalsSelectedMonth)}?`)) return;
-  const monthKey=goalsSelectedMonth;
-  const[yr,mo]=monthKey.split('-').map(Number);
-  const weekKeys=weeksInMonth(yr,mo).map(w=>w.monKey);
-  const clearBucket=bucket=>{Object.values(bucket).forEach(obj=>{if(!obj.monthly)obj.monthly={};if(!obj.weekly)obj.weekly={};delete obj.monthly[monthKey];weekKeys.forEach(wk=>delete obj.weekly[wk]);});};
-  clearBucket(goals.kiosks);clearBucket(goals.sellers);
+  if(!confirm(`Limpar todas as metas de ${monthLabel(goalsSelMonth)}?`))return;
+  const mk=goalsSelMonth;
+  const[yr,mo]=mk.split('-').map(Number);
+  const wKeys=weeksInMonth(yr,mo).map(w=>w.monKey);
+  Object.values(goals.kiosks).forEach(G=>{
+    if(G.stdWeekly)wKeys.forEach(k=>delete G.stdWeekly[k]);
+  });
+  Object.values(goals.sellers).forEach(S=>{
+    if(S.overrideMonthly)delete S.overrideMonthly[mk];
+    if(S.overrideWeekly)wKeys.forEach(k=>delete S.overrideWeekly[k]);
+  });
   saveAllGoals().then(()=>renderGoals());
 }
 </script>
