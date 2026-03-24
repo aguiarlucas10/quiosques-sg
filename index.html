@@ -880,6 +880,18 @@ function renderKiosques(){
   },100);
 }
 
+// ── Goals month selection state ──────────────────────────
+let goalsSelMonth = null;
+
+function initGoalsMonth() {
+  if (goalsSelMonth) return;
+  const months = availableMonths();
+  const dm = (store.dateRange || []).map(d => d.slice(0, 7)).sort();
+  goalsSelMonth = dm[dm.length - 1] || months[months.length - 1] || months[0];
+}
+
+function selectGoalsMonth(ym) { goalsSelMonth = ym; renderGoals(); }
+
 // Global registry for safe index-based callbacks (avoids JSON.stringify in HTML attrs)
 let _reg = { kiosks:[], sellers:[] };
 function _ki(kn){ let i=_reg.kiosks.indexOf(kn); if(i<0){i=_reg.kiosks.length;_reg.kiosks.push(kn);} return i; }
