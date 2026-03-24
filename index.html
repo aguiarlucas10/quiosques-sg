@@ -880,17 +880,18 @@ function renderKiosques(){
   },100);
 }
 
-// ══════════════════════════════════════════════════════════
-//  RENDER GOALS CONFIG
-// ══════════════════════════════════════════════════════════
-let goalsSelMonth=null;
-function initGoalsMonth(){
-  if(goalsSelMonth)return;
-  const months=availableMonths();
-  const dm=(store.dateRange||[]).map(d=>d.slice(0,7)).sort();
-  goalsSelMonth=dm[dm.length-1]||months[months.length-1]||months[0];
-}
-function selectGoalsMonth(ym){goalsSelMonth=ym;renderGoals();}
+// Global registry for safe index-based callbacks (avoids JSON.stringify in HTML attrs)
+let _reg = { kiosks:[], sellers:[] };
+function _ki(kn){ let i=_reg.kiosks.indexOf(kn); if(i<0){i=_reg.kiosks.length;_reg.kiosks.push(kn);} return i; }
+function _si(sn){ let i=_reg.sellers.indexOf(sn); if(i<0){i=_reg.sellers.length;_reg.sellers.push(sn);} return i; }
+function _kn(i){ return _reg.kiosks[i]; }
+function _sn(i){ return _reg.sellers[i]; }
+
+// Wrappers called from HTML attrs using safe integer indices
+function _setKioskStd(ki,field,val){ setKioskStd(_kn(ki),field,val); }
+function _setKioskStdWeek(ki,monKey,val){ setKioskStdWeek(_kn(ki),monKey,val); }
+function _toggleSeller(ki,si){ toggleSeller(_kn(ki),_sn(si)); }
+function _setSellerOverride(si,field,key,val){ setSellerOverride(_sn(si),field,key,val); }
 
 function renderGoals(){
   const ks=Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq);
@@ -911,52 +912,52 @@ function renderGoals(){
 
   h+=`<div class="goals-grid">`;
 
-  // ── LEFT: Kiosk goal config (one block per kiosk) ──
+  // ── LEFT: Kiosk goal config ──
   h+=`<div class="goals-card">
     <div class="goals-card-title">Quiosques</div>
     <div class="goals-card-sub">${monthLabel(monthKey)} · padrão por vendedor</div>
     <div class="goals-card-hint">
       Configure a <strong>meta padrão por vendedor</strong> e os <strong>vendedores ativos</strong>.<br>
-      Meta do quiosque = padrão × n° ativos. Vendedores inativos ficam ocultos nos rankings.
+      Meta do quiosque = padrão × n° ativos. Inativos ficam ocultos nos rankings.
     </div>`;
 
   ks.forEach(k=>{
     const kn=k.name;
+    const ki=_ki(kn);
     const G=goals.kiosks[kn]||{};
     const std=G.stdMonthly||'';
     const active=G.activeSellers||[];
     const allS=Object.values(k.sellers).sort((a,b)=>(b.liq||0)-(a.liq||0));
     const nActive=active.length||allS.length;
     const monthCalc=(G.stdMonthly||0)*nActive;
-    const wkCalc=week=>(G.stdWeekly?.[week.monKey]||0)*nActive;
+    const wkCalc=w=>(G.stdWeekly?.[w.monKey]||0)*nActive;
 
     h+=`<div class="gk-block">
       <div class="gk-head">
         <div>
           <div class="gk-name">${sK(kn)}</div>
-          <div class="gk-sub">${nActive} vend. ativos${monthCalc?` · meta mês ${R(monthCalc)}`:' · configure abaixo'}</div>
+          <div class="gk-sub" id="sub-k${ki}">${nActive} vend. ativos${monthCalc?` · meta mês ${R(monthCalc)}`:' · configure abaixo'}</div>
         </div>
       </div>
-
       <div class="gk-std">
         <div class="gk-std-item">
           <span class="gk-lbl">Padrão Mensal por Vendedor</span>
           <div class="gk-inp-row">
             <input class="gk-inp" type="number" min="0" step="500"
               value="${std}" placeholder="0"
-              oninput="setKioskStd(${JSON.stringify(kn)},'stdMonthly',this.value)">
+              oninput="_setKioskStd(${ki},'stdMonthly',this.value)">
             <span class="gk-unit">/ vend.</span>
           </div>
-          ${monthCalc?`<div style="font-size:.68rem;color:var(--muted);margin-top:3px">Total: ${R(monthCalc)}</div>`:''}
+          ${monthCalc?`<div style="font-size:.68rem;color:var(--muted);margin-top:3px" id="calc-k${ki}">Total: ${R(monthCalc)}</div>`:`<div style="font-size:.68rem;color:var(--muted);margin-top:3px" id="calc-k${ki}"></div>`}
         </div>
       </div>
-
       <div class="gk-sellers-lbl">Vendedores — ativo/inativo</div>
-      <div class="seller-toggle-list">`;
+      <div class="seller-toggle-list" id="toggles-k${ki}">`;
 
     allS.forEach(s=>{
+      const si=_si(s.name);
       const isActive=active.length===0||active.includes(s.name);
-      h+=`<div class="seller-toggle${isActive?' active':''}" onclick="toggleSeller(${JSON.stringify(kn)},${JSON.stringify(s.name)})">
+      h+=`<div class="seller-toggle${isActive?' active':''}" id="tog-k${ki}-s${si}" onclick="_toggleSeller(${ki},${si})">
         <div>
           <div class="seller-toggle-name">${s.name}</div>
           <div class="seller-toggle-liq">${R(s.liq||0)}</div>
@@ -965,31 +966,31 @@ function renderGoals(){
       </div>`;
     });
 
-    h+=`</div>`;
+    h+=`</div>
+      <div class="gk-weeks">
+        <div class="gk-week-lbl">Padrão Semanal por Vendedor</div>`;
 
-    // Weekly breakdown
-    h+=`<div class="gk-weeks"><div class="gk-week-lbl">Padrão Semanal por Vendedor</div>`;
     weeks.forEach((w,wi)=>{
       const wStd=G.stdWeekly?.[w.monKey]||'';
       const wCalc=wkCalc(w);
+      // monKey is always YYYY-MM-DD (safe in attrs, no special chars)
       h+=`<div class="gk-week-row">
         <span class="gk-week-label">S${wi+1} <span style="color:var(--muted)">${w.label}${w.crossMonth?' ↗':''}</span></span>
         <div class="gk-week-right">
-          ${wCalc?`<span class="gk-week-calc">= ${R(wCalc)}</span>`:''}
+          <span class="gk-week-calc" id="wcalc-k${ki}-${w.monKey}">${wCalc?'= '+R(wCalc):''}</span>
           <input class="gk-inp" type="number" min="0" step="200" style="width:90px"
             value="${wStd}" placeholder="0"
-            oninput="setKioskStdWeek(${JSON.stringify(kn)},'${w.monKey}',this.value)">
+            oninput="_setKioskStdWeek(${ki},'${w.monKey}',this.value)">
           <span class="gk-unit">/ vend.</span>
         </div>
       </div>`;
     });
-    h+=`</div>`;
 
-    h+=`</div>`;  // gk-block
+    h+=`</div></div>`;  // gk-weeks + gk-block
   });
   h+=`</div>`;  // goals-card
 
-  // ── RIGHT: Individual overrides per seller ──
+  // ── RIGHT: Individual seller overrides ──
   h+=`<div class="goals-card">
     <div class="goals-card-title">Ajustes Individuais</div>
     <div class="goals-card-sub">${monthLabel(monthKey)} · sobrescreve o padrão do quiosque</div>
@@ -1001,31 +1002,35 @@ function renderGoals(){
     const visibleSellers=active.length>0?allS.filter(s=>active.includes(s.name)):allS;
     if(!visibleSellers.length)return;
 
-    h+=`<div class="goal-kiosk-section"><div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">${sK(k.name)}</div>`;
+    h+=`<div class="goal-kiosk-section">
+      <div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">${sK(k.name)}</div>`;
+
     visibleSellers.forEach(s=>{
+      const si=_si(s.name);
       const ov=goals.sellers[s.name]||{};
       const ovM=ov.overrideMonthly?.[monthKey]||'';
+
       h+=`<div class="gk-override-row">
         <span class="gk-override-name">${s.name}</span>
-        <div class="gk-override-inputs">
-          <div style="display:flex;flex-direction:column;gap:2px">
-            <span class="gk-lbl">Mensal</span>
-            <input class="gk-inp" type="number" min="0" step="500" style="width:100px"
-              value="${ovM}" placeholder="padrão"
-              oninput="setSellerOverride(${JSON.stringify(s.name)},'overrideMonthly','${monthKey}',this.value)">
-          </div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span class="gk-lbl">Mensal</span>
+          <input class="gk-inp" type="number" min="0" step="500" style="width:100px"
+            value="${ovM}" placeholder="padrão"
+            oninput="_setSellerOverride(${si},'overrideMonthly','${monthKey}',this.value)">
         </div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:4px;padding-left:0;margin-bottom:8px">`;
+      <div style="margin-bottom:10px">`;
+
       weeks.forEach((w,wi)=>{
         const ovW=ov.overrideWeekly?.[w.monKey]||'';
         h+=`<div class="gk-week-row" style="padding:3px 0">
           <span class="gk-week-label" style="font-size:.75rem">S${wi+1} <span style="color:var(--muted)">${w.label}</span></span>
           <input class="gk-inp" type="number" min="0" step="200" style="width:90px"
             value="${ovW}" placeholder="padrão"
-            oninput="setSellerOverride(${JSON.stringify(s.name)},'overrideWeekly','${w.monKey}',this.value)">
+            oninput="_setSellerOverride(${si},'overrideWeekly','${w.monKey}',this.value)">
         </div>`;
       });
+
       h+=`</div>`;
     });
     h+=`</div>`;
@@ -1056,37 +1061,25 @@ function ensureSeller(sn){
 function setKioskStd(kn,field,val){
   ensureKiosk(kn);
   goals.kiosks[kn][field]=parseFloat(val)||0;
-  // Live update derived label
+  // Live update derived labels
+  const ki=_ki(kn);
   const nActive=goals.kiosks[kn].activeSellers.length||Object.keys(store.kiosks[kn]?.sellers||{}).length;
   const calc=(goals.kiosks[kn].stdMonthly||0)*nActive;
-  // Find the sub-label in DOM and update
-  const blocks=document.querySelectorAll('.gk-block');
-  blocks.forEach(b=>{
-    if(b.querySelector('.gk-name')?.textContent===sK(kn)){
-      const sub=b.querySelector('.gk-sub');
-      if(sub)sub.textContent=`${nActive} vend. ativos${calc?' · meta mês '+R(calc):' · configure abaixo'}`;
-      const derived=b.querySelector('div[style*="color:var(--muted)"]');
-      if(derived&&calc)derived.textContent='Total: '+R(calc);
-    }
-  });
+  const sub=document.getElementById(`sub-k${ki}`);
+  if(sub)sub.textContent=`${nActive} vend. ativos${calc?' · meta mês '+R(calc):' · configure abaixo'}`;
+  const calcEl=document.getElementById(`calc-k${ki}`);
+  if(calcEl)calcEl.textContent=calc?'Total: '+R(calc):'';
 }
 
 function setKioskStdWeek(kn,monKey,val){
   ensureKiosk(kn);
   goals.kiosks[kn].stdWeekly[monKey]=parseFloat(val)||0;
+  // Live update week calc label
+  const ki=_ki(kn);
   const nActive=goals.kiosks[kn].activeSellers.length||Object.keys(store.kiosks[kn]?.sellers||{}).length;
   const calc=(goals.kiosks[kn].stdWeekly[monKey]||0)*nActive;
-  // Update calc label in DOM
-  const rows=document.querySelectorAll('.gk-week-right');
-  rows.forEach(row=>{
-    const inp=row.querySelector('input');
-    if(inp&&inp.getAttribute('oninput')?.includes(JSON.stringify(monKey))&&
-       inp.closest('.gk-block')?.querySelector('.gk-name')?.textContent===sK(kn)){
-      let calc_el=row.querySelector('.gk-week-calc');
-      if(!calc_el&&calc){calc_el=document.createElement('span');calc_el.className='gk-week-calc';row.insertBefore(calc_el,inp);}
-      if(calc_el)calc_el.textContent=calc?'= '+R(calc):'';
-    }
-  });
+  const el=document.getElementById(`wcalc-k${ki}-${monKey}`);
+  if(el)el.textContent=calc?'= '+R(calc):'';
 }
 
 function toggleSeller(kn,sName){
@@ -1094,29 +1087,25 @@ function toggleSeller(kn,sName){
   const K=store.kiosks[kn];
   const allSellers=Object.keys(K?.sellers||{});
   let active=goals.kiosks[kn].activeSellers;
-  // If empty (none configured yet) = all are active; init with all minus this one
-  if(active.length===0)active=goals.kiosks[kn].activeSellers=[...allSellers];
+  // If empty (none configured yet) = all active; init with all
+  if(active.length===0)goals.kiosks[kn].activeSellers=active=[...allSellers];
   const idx=active.indexOf(sName);
   if(idx>=0)active.splice(idx,1);
   else active.push(sName);
-  // Update toggle UI without full re-render
-  const toggles=document.querySelectorAll('.seller-toggle');
-  toggles.forEach(t=>{
-    if(t.querySelector('.seller-toggle-name')?.textContent===sName&&
-       t.closest('.gk-block')?.querySelector('.gk-name')?.textContent===sK(kn)){
-      t.classList.toggle('active',active.includes(sName));
-    }
-  });
-  // Update sub count
+
+  // Update toggle UI using IDs
+  const ki=_ki(kn);
+  const si=_si(sName);
+  const tog=document.getElementById(`tog-k${ki}-s${si}`);
+  if(tog)tog.classList.toggle('active',active.includes(sName));
+
+  // Update count label
   const nActive=active.length;
   const calc=(goals.kiosks[kn].stdMonthly||0)*nActive;
-  const blocks=document.querySelectorAll('.gk-block');
-  blocks.forEach(b=>{
-    if(b.querySelector('.gk-name')?.textContent===sK(kn)){
-      const sub=b.querySelector('.gk-sub');
-      if(sub)sub.textContent=`${nActive} vend. ativos${calc?' · meta mês '+R(calc):' · configure abaixo'}`;
-    }
-  });
+  const sub=document.getElementById(`sub-k${ki}`);
+  if(sub)sub.textContent=`${nActive} vend. ativos${calc?' · meta mês '+R(calc):' · configure abaixo'}`;
+  const calcEl=document.getElementById(`calc-k${ki}`);
+  if(calcEl)calcEl.textContent=calc?'Total: '+R(calc):'';
 }
 
 function setSellerOverride(sn,field,key,val){
