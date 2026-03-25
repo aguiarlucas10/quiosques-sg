@@ -48,6 +48,11 @@ const REF_GOALS = doc(db, 'app', 'goals');
 window.fbSaveStore = async function(data) {
   await setDoc(REF_STORE, data);
 };
+window.fbResetStore = async function() {
+  const empty = { period:null, importedAt:null, gtLiq:0, gtPecas:0,
+                  kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
+  await setDoc(REF_STORE, empty);
+};
 window.fbSaveGoals = async function(data) {
   await setDoc(REF_GOALS, data);
 };
@@ -689,13 +694,20 @@ tr.inactive td{opacity:.35}
 
 <section class="pnl" id="pnl-import">
   <div class="h1">Importar Relatório</div><div class="sub">PDVSuite · VENRES.RPT</div>
-  <div class="notice">Formato: CSV exportado via <strong>Gestor → Relatório Financeiro → Vendas por Vendedor</strong>. Deduplicação automática — reimportar é seguro.</div>
+  <div class="notice">Formato: CSV exportado via <strong>Gestor → Relatório Financeiro → Vendas por Vendedor</strong>. Deduplicação por ID de transação (col. 55) — reimportar é sempre seguro.</div>
   <div class="drop" id="drop" onclick="document.getElementById('fi').click()">
     <div class="drop-i">↑</div><div class="drop-t">Arraste o CSV aqui</div><div class="drop-h">ou clique para selecionar · .csv</div>
   </div>
   <input type="file" id="fi" accept=".csv,.txt" onchange="onFile(event)">
   <div class="logbox" id="logbox"><div class="ll dim">— aguardando arquivo —</div></div>
-  <button class="btn-primary" id="btnProc" onclick="processCSV()" disabled>Processar e publicar</button>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <button class="btn-primary" id="btnProc" onclick="processCSV()" disabled>Importar (acumular)</button>
+    <button class="btn-secondary" id="btnRebuild" onclick="rebuildFromCSV()" disabled>Reconstruir do zero</button>
+  </div>
+  <div style="margin-top:10px;font-size:.72rem;color:var(--muted);line-height:1.6">
+    <strong style="color:var(--text)">Importar:</strong> acumula sobre dados existentes, ignora duplicatas.<br>
+    <strong style="color:var(--text)">Reconstruir:</strong> recomputa tudo do zero a partir do CSV carregado. Use para corrigir dados duplicados.
+  </div>
 </section>
 
 <section class="pnl" id="pnl-goals">
@@ -797,7 +809,10 @@ let rawCSV=null;
 function readFile(f){
   resetLog();log(`📄 ${f.name}  (${(f.size/1024).toFixed(1)} KB)`,'info');
   const r=new FileReader();
-  r.onload=ev=>{rawCSV=ev.target.result;log(`✓ Lido — ${rawCSV.split('\n').length} linhas brutas`,'ok');preview(rawCSV);document.getElementById('btnProc').disabled=false;};
+  r.onload=ev=>{rawCSV=ev.target.result;log(`✓ Lido — ${rawCSV.split('\n').length} linhas brutas`,'ok');preview(rawCSV);
+    document.getElementById('btnProc').disabled=false;
+    const rb=document.getElementById('btnRebuild');if(rb)rb.disabled=false;
+  };
   r.readAsText(f,'UTF-8');
 }
 function resetLog(){document.getElementById('logbox').innerHTML='';}
@@ -1000,6 +1015,126 @@ function preview(text){
   log('→ Clique em "Processar" para importar','dim');
 }
 
+// Rebuild store from scratch from current CSV (fixes duplicated data)
+// Does NOT touch goals — only rewrites kiosks/sellers/txnKeys/dateRange
+async function rebuildFromCSV() {
+  if (!rawCSV) { log('Carregue um arquivo CSV primeiro.', 'err'); return; }
+  if (!confirm(
+    'Reconstruir dados do zero a partir do CSV carregado?\n\n' +
+    '• Os dados de vendas serão recomputados completamente\n' +
+    '• Metas e configurações serão mantidas\n' +
+    '• Use isso para corrigir dados duplicados\n\n' +
+    'Continuar?'
+  )) return;
+
+  log('⟳ Reconstruindo do zero (ignorando dados existentes)…', 'info');
+  document.getElementById('btnProc').disabled = true;
+  document.getElementById('btnRebuild').disabled = true;
+
+  const rows = parseCSVProper(rawCSV);
+  // Start FRESH — empty kiosks, sellers, txnKeys
+  const kiosks   = {};
+  const sellers  = {};
+  const seenKeys = new Set();
+  let newTxns = 0, dupInFile = 0;
+  let period = null, gtLiq = 0, gtPecas = 0;
+  const allDates = new Set();
+  const sellerTotals = {};
+
+  for (const r of rows) {
+    if (!r[9]?.includes('Loja')) continue;
+    const kName = (r[10]||'').replace(/\s+/g,' ').trim();
+    const sName = (r[12]||'').trim();
+    if (!kName || !sName) continue;
+    if (!period && r[1]) period = (r[1]||'').replace(/Período de /i,'').replace(/ Até /i,' – ').trim();
+    const _gl = brNum(r[80]), _gp = brInt(r[82]);
+    if (_gl > gtLiq) { gtLiq = _gl; gtPecas = _gp; }
+
+    const stk = kName+'||'+sName;
+    const sLiq = brNum(r[16]), sPecas = brInt(r[18]), sDias = brInt(r[34]), sDesc = brNum(r[14]);
+    if (!sellerTotals[stk] || sLiq > sellerTotals[stk].liq)
+      sellerTotals[stk] = { kName, sName, liq:sLiq, pecas:sPecas, dias:sDias, desc:sDesc };
+
+    const date   = normDate(r[56]||'');
+    const tId    = r[55]?.trim() || '';
+    const tFinal = brNum(r[60]), tPecas = brInt(r[62]), tTroca = brInt(r[63]), tBruto = brNum(r[57]);
+    const txnKey = tId || [kName,sName,date,tBruto.toFixed(2),tFinal.toFixed(2),tPecas].join('|');
+
+    // Dedup within the file itself (in case the CSV has internal duplicates)
+    if (seenKeys.has(txnKey)) { dupInFile++; continue; }
+    seenKeys.add(txnKey); newTxns++;
+    if (date) allDates.add(date);
+
+    if (!kiosks[kName]) kiosks[kName] = { name:kName, liq:0, pecas:0, trocas:0, sellers:{}, byDate:{} };
+    const K = kiosks[kName];
+    if (!K.sellers[sName]) K.sellers[sName] = { name:sName, trocas:0, byDate:{} };
+    if (date) {
+      if (!K.byDate[date]) K.byDate[date] = { liq:0, pecas:0 };
+      K.byDate[date].liq += tFinal; K.byDate[date].pecas += tPecas;
+      if (!K.sellers[sName].byDate[date]) K.sellers[sName].byDate[date] = { liq:0, pecas:0 };
+      K.sellers[sName].byDate[date].liq += tFinal; K.sellers[sName].byDate[date].pecas += tPecas;
+      K.sellers[sName].trocas += tTroca;
+    }
+  }
+
+  for (const st of Object.values(sellerTotals)) {
+    const K = kiosks[st.kName]; if (!K) continue;
+    if (!K.sellers[st.sName]) K.sellers[st.sName] = { name:st.sName, trocas:0, byDate:{} };
+    Object.assign(K.sellers[st.sName], { liq:st.liq, pecas:st.pecas, dias:st.dias, desc:st.desc });
+  }
+  for (const kn in kiosks) {
+    const K = kiosks[kn]; K.liq = K.pecas = 0;
+    for (const sn in K.sellers) { K.liq += K.sellers[sn].liq||0; K.pecas += K.sellers[sn].pecas||0; }
+    for (const sn in K.sellers) {
+      const S = K.sellers[sn];
+      if (!sellers[sn] || (S.liq||0) > (sellers[sn].liq||0)) sellers[sn] = { ...S, kiosk:kn };
+    }
+  }
+
+  const kCount = Object.keys(kiosks).length;
+  if (kCount === 0) {
+    log('✗ Nenhum quiosque encontrado.', 'err');
+    document.getElementById('btnProc').disabled = false;
+    document.getElementById('btnRebuild').disabled = false;
+    return;
+  }
+
+  log(`✓ Reconstruído: ${kCount} quiosques · ${Object.keys(sellers).length} vendedores`, 'ok');
+  log(`✓ Transações únicas no CSV: ${newTxns}${dupInFile ? ` · ${dupInFile} duplicatas internas ignoradas` : ''}`, 'ok');
+  log('⟳ Salvando no Firebase…', 'info');
+
+  try {
+    const newStore = {
+      period, importedAt: new Date().toLocaleString('pt-BR'),
+      gtLiq, gtPecas, kiosks, sellers,
+      txnKeys: Array.from(seenKeys),
+      dateRange: Array.from(allDates).sort()
+    };
+    await window.fbSaveStore(newStore);
+    log('✓ Dados reconstruídos e publicados!', 'ok');
+    toast('Dados reconstruídos ✓', 'ok');
+    renderGeral(); renderKiosques();
+  } catch(e) {
+    log('✗ Erro ao salvar: ' + e.message, 'err');
+  }
+  document.getElementById('btnProc').disabled = false;
+  document.getElementById('btnRebuild').disabled = false;
+}
+
+async function resetStore() {
+  if (!confirm('Zerar TODOS os dados importados?\n\nIsso apagará todos os quiosques, vendedores e transações do Firebase.\nAs metas configuradas serão mantidas.\n\nEsta ação não pode ser desfeita.')) return;
+  showStatus('Zerando dados…', 'dim');
+  try {
+    await window.fbResetStore();
+    log('✓ Dados zerados com sucesso. Reimporte o relatório.', 'ok');
+    showEmptyState();
+    toast('Dados zerados ✓', 'ok');
+  } catch(e) {
+    showStatus('Erro: ' + e.message, 'err');
+    log('✗ Erro ao zerar: ' + e.message, 'err');
+  }
+}
+
 async function processCSV(){
   if(!rawCSV)return;
   log('⟳ Processando…','info');
@@ -1026,8 +1161,11 @@ async function processCSV(){
     if(!sellerTotals[stk]||sLiq>sellerTotals[stk].liq)
       sellerTotals[stk]={kName,sName,liq:sLiq,pecas:sPecas,dias:sDias,desc:sDesc};
     const date=normDate(r[56]||'');
-    const tFinal=brNum(r[60]),tPecas=brInt(r[62]),tTroca=brInt(r[63]),tBruto=brNum(r[57]);
-    const txnKey=[kName,sName,date,tBruto.toFixed(2),tFinal.toFixed(2),tPecas].join('|');
+    const tId    = r[55]?.trim() || '';  // Transaction ID (PDV sale number, col 55)
+    const tFinal = brNum(r[60]), tPecas=brInt(r[62]), tTroca=brInt(r[63]), tBruto=brNum(r[57]);
+    // Use transaction ID as dedup key — globally unique per sale (timestamp-based)
+    // Fallback to composite key if col55 is empty (shouldn't happen in practice)
+    const txnKey = tId || [kName,sName,date,tBruto.toFixed(2),tFinal.toFixed(2),tPecas].join('|');
     if(existingKeys.has(txnKey)){dupTxns++;continue;}
     existingKeys.add(txnKey);newTxns++;
     if(date)allDates.add(date);
