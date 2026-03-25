@@ -63,23 +63,58 @@ onSnapshot(REF_STORE, snap => {
   tryRender();
 }, err => { storeLoaded = true; console.warn('store:', err); });
 
+// Sanitize goals: strip any values that are template literal strings (corrupted saves)
+function sanitizeGoals(g) {
+  if (!g) return { kiosks:{}, sellers:{} };
+  const isCorrupt = v => typeof v === 'string' && v.includes('${');
+  const cleanNum  = v => (isCorrupt(v) || isNaN(parseFloat(v))) ? 0 : parseFloat(v);
+  const cleanObj  = obj => {
+    if (!obj || typeof obj !== 'object') return {};
+    const out = {};
+    for (const [k,v] of Object.entries(obj)) {
+      out[k] = isCorrupt(v) ? 0 : (typeof v === 'number' ? v : (typeof v === 'object' ? cleanObj(v) : v));
+    }
+    return out;
+  };
+  const cleanKiosk = G => {
+    if (!G) return {};
+    return {
+      monthlyTotal:  cleanNum(G.monthlyTotal),
+      weeklyOverride: cleanObj(G.weeklyOverride||{}),
+      activeSellers:  Array.isArray(G.activeSellers) ? G.activeSellers.filter(s=>typeof s==='string'&&!isCorrupt(s)) : [],
+    };
+  };
+  const cleanSeller = S => {
+    if (!S) return {};
+    return {
+      overrideMonthly: cleanObj(S.overrideMonthly||{}),
+      overrideWeekly:  cleanObj(S.overrideWeekly||{}),
+    };
+  };
+  return {
+    kiosks:  Object.fromEntries(Object.entries(g.kiosks||{}).map(([k,v]) => [k, cleanKiosk(v)])),
+    sellers: Object.fromEntries(Object.entries(g.sellers||{}).map(([k,v]) => [k, cleanSeller(v)])),
+  };
+}
+
 onSnapshot(REF_GOALS, snap => {
   if (!snap.exists()) { goalsLoaded = true; tryRender(); return; }
-  window._goals = snap.data();
+  window._goals = sanitizeGoals(snap.data());
   goalsLoaded = true;
   tryRender();
-  if (document.getElementById('pnl-goals')?.classList.contains('on')) renderGoals();
+  if (document.getElementById('pnl-goals')?.classList.contains('on')) window.renderGoals?.();
 }, err => { goalsLoaded = true; console.warn('goals:', err); });
 
 function tryRender() {
   // Only render dashboards after BOTH docs have loaded at least once
+  // Use window.* calls because this module may fire (via Firestore cache) before
+  // the regular script tag has executed, so direct function refs may not exist yet.
   if (!storeLoaded || !goalsLoaded) return;
   if (Object.keys(window._store?.kiosks || {}).length > 0) {
-    renderGeral();
-    renderKiosques();
+    window.renderGeral?.();
+    window.renderKiosques?.();
   } else {
-    // No data yet — show empty state
-    showEmptyState();
+    window.showEmptyState?.();
   }
 }
 
