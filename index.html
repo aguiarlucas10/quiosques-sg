@@ -927,6 +927,16 @@ const PRIZE_TIERS=[
   {pct:120,label:'Super', prize:100},
   {pct:100,label:'Meta',  prize:50},
 ];
+const PRIZE_TIERS_MONTHLY=[
+  {pct:160,label:'Ultra', prize:800},
+  {pct:140,label:'Mega',  prize:600},
+  {pct:120,label:'Super', prize:400},
+  {pct:100,label:'Meta',  prize:200},
+];
+function prizeForPctMonthly(pct) {
+  for (const t of PRIZE_TIERS_MONTHLY) if (pct >= t.pct) return t;
+  return null;
+}
 function prizeForPct(pct){
   for(const t of PRIZE_TIERS) if(pct>=t.pct) return t;
   return null;
@@ -1305,11 +1315,6 @@ function sWeekPcs(kName, sName, monday, sunday) {
 function setGeralPeriod(val) {
   geralPeriod = val;
   renderGeral();
-}
-
-function prizeForPctMonthly(pct) {
-  for (const t of PRIZE_TIERS_MONTHLY) if (pct >= t.pct) return t;
-  return null;
 }
 
 // Build list of weeks that have data in current month
