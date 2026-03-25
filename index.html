@@ -355,6 +355,7 @@ tr.inactive td{opacity:.35}
 
 /* Toolbar: dropdown + KPI strip */
 /* Toolbar: filters row */
+.geral-toolbar{margin-bottom:20px}
 .geral-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:16px}
 .geral-filter-item{display:flex;flex-direction:column;gap:4px}
 .geral-month-wrap{display:flex;align-items:center;gap:10px;margin-bottom:16px}
@@ -679,6 +680,8 @@ tr.inactive td{opacity:.35}
   <div class="sub">Faixas de atingimento por vendedor · mês e semana</div>
   <div id="premiacoesBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
 </section>
+
+<section class="pnl" id="pnl-consolidado">
   <div class="h1">Consolidado</div>
   <div class="sub">Visão financeira completa · acesso restrito</div>
   <div id="consolidadoBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
@@ -852,7 +855,9 @@ function weeksInMonth(year,month){
     const sun=new Date(d.getTime()+6*86400000);
     const monKey=d.toISOString().slice(0,10);
     const fmt=dt=>dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-    result.push({monKey,label:`${fmt(d)} – ${fmt(sun)}`,crossMonth:sun.getMonth()!==d.getMonth()});
+    const monday=new Date(d);  // snapshot current d as monday
+    result.push({monKey,label:`${fmt(d)} – ${fmt(sun)}`,
+                 monday,sunday:sun,crossMonth:sun.getMonth()!==d.getMonth()});
     d=new Date(d.getTime()+7*86400000);
   }
   return result;
