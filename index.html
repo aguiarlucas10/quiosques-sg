@@ -201,29 +201,7 @@ tr:hover td{background:var(--surface2)}
 .gp-row{display:flex;justify-content:space-between;align-items:center;font-size:.7rem;margin-bottom:4px}
 .gp-meta{font-size:.65rem;color:var(--muted);margin-top:3px}
 
-/* KIOSK CARDS */
-.kg{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.kc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .15s}
-.kc:hover{border-color:#444}
-.kch{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}
-.kcn{font-size:1.15rem;color:var(--text)}.kct{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:3px}
-.ktot{text-align:right}.ktl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
-.ktv{font-family:var(--mono);font-size:1.5rem;color:var(--text)}
-.kgoal{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
-.kgoal-item{background:var(--surface2);padding:12px 14px}
-.kgoal-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.kgoal-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-.kgoal-val{font-family:var(--mono);font-size:.88rem;color:var(--text)}
-.kgoal-pct{font-family:var(--mono);font-size:.75rem}
-.kgoal-bar{height:2px;background:var(--border);border-radius:1px;overflow:hidden;margin-top:2px}
-.kgoal-fill{height:100%;border-radius:1px;transition:width .7s}
-.ms-g{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
-.ms{background:var(--surface2);padding:12px 14px}
-.ms-l{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.ms-v{font-family:var(--mono);font-size:.95rem;color:var(--text)}.ms-s{font-size:.7rem;color:var(--muted);margin-top:2px}
-.sd{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
-.kcc{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
-.kcc-l{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+
 .star{display:inline-block;width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.1);font-size:8px;line-height:16px;text-align:center;margin-right:6px;color:var(--text)}
 
 /* INACTIVE seller row */
@@ -341,6 +319,105 @@ tr.inactive td{opacity:.35}
 /* RESPONSIVE */
 @media(max-width:1024px){.kpi-g{grid-template-columns:repeat(2,1fr)}.cr{grid-template-columns:1fr}.kg{grid-template-columns:1fr}.goals-grid{grid-template-columns:1fr}}
 @media(max-width:640px){.topbar{padding:0 16px}.logo{font-size:.72rem}.tab{padding:0 12px;font-size:.7rem}.pnl{padding:20px 16px 56px}.kpi-g{grid-template-columns:1fr 1fr}.kpi-v{font-size:1.1rem}.modal{width:calc(100% - 32px);padding:28px 20px}.gk-std{grid-template-columns:1fr}.kgoal{grid-template-columns:1fr}}
+
+/* Prize tier badges */
+.gbadge.ultra { background:rgba(180,130,255,.20); color:#c084fc; }
+.gbadge.mega  { background:rgba(250,200,80,.18);  color:#fbbf24; }
+.gbadge.super { background:rgba(100,210,255,.18); color:#38bdf8; }
+.gbadge.hit   { background:rgba(76,175,125,.18);  color:var(--success); }
+.gbadge.miss  { background:rgba(224,82,82,.12);   color:var(--danger); }
+/* Hint line below input */
+.gk-hint { font-size:.68rem; color:var(--muted); margin-top:3px; }
+/* Kiosk section label in overrides */
+.gk-kiosk-lbl { font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+
+/* ── PERIOD SELECTOR ── */
+.period-bar{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:20px}
+.period-btn{padding:0 14px;height:32px;background:none;border:1px solid var(--border);border-radius:20px;color:var(--muted);font-family:var(--font);font-size:.75rem;letter-spacing:.03em;cursor:pointer;transition:all .15s;white-space:nowrap}
+.period-btn:hover{color:var(--text);border-color:#555}
+.period-btn.on{background:#fff;border-color:#fff;color:#000}
+
+/* ── KIOSK PROGRESS GRID (Painel Geral) ── */
+.kiosk-progress-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.kpg-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+.kpg-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.kpg-name{font-size:1rem;color:var(--text)}
+.kpg-meta{font-size:.68rem;color:var(--muted);text-align:right}
+.kpg-pct{font-family:var(--mono);font-size:2rem;line-height:1;margin-bottom:6px}
+.kpg-bar-wrap{margin-bottom:8px}
+.kpg-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.kpg-fill{height:100%;border-radius:2px;transition:width .7s cubic-bezier(.4,0,.2,1)}
+.kpg-numbers{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.kpg-pieces{font-family:var(--mono);font-size:.8rem;color:var(--muted)}
+.kpg-goal-lbl{font-size:.7rem;color:var(--muted)}
+.kpg-sellers{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:12px}
+.kpg-seller{background:var(--surface2);border-radius:8px;padding:10px 12px}
+.kpg-seller-name{font-size:.85rem;color:var(--text);margin-bottom:5px;display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.kpg-seller-stats{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.kpg-seller-pcs{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.kpg-seller-pct{font-family:var(--mono);font-size:.78rem}
+
+/* ── KIOSK SECTIONS (Quiosques panel) ── */
+.kiosk-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:12px}
+.ks-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px}
+.ks-name{font-size:1.1rem;color:var(--text)}
+.ks-sub{font-size:.68rem;color:var(--muted);letter-spacing:.05em;margin-top:3px}
+.ks-total{text-align:right;flex-shrink:0}
+.ks-total-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.ks-total-val{font-family:var(--mono);font-size:1.3rem;color:var(--text)}
+.ks-goals{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.ks-goal-item{background:var(--surface2);padding:12px 14px}
+.ks-goal-lbl{font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.ks-goal-n{opacity:.5;font-weight:400}
+.ks-goal-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px}
+.ks-goal-val{font-family:var(--mono);font-size:.9rem;color:var(--text)}
+.ks-goal-pct{font-family:var(--mono);font-size:.8rem}
+.ks-goal-sub{font-size:.65rem;color:var(--muted);margin-bottom:5px}
+.ks-goal-bar{height:2px;background:var(--border);border-radius:1px;overflow:hidden}
+.ks-goal-fill{height:100%;border-radius:1px;transition:width .7s}
+.ks-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.ks-stat{background:var(--surface2);padding:10px 12px}
+.ks-stat-l{font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.ks-stat-v{font-family:var(--mono);font-size:.88rem;color:var(--text)}
+.ks-sellers-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.ks-sellers{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:8px}
+.ks-seller-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;transition:border-color .15s}
+.ks-seller-card:hover{border-color:#444}
+.ks-seller-card.inactive{opacity:.35}
+.ks-sc-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.ks-sc-name{font-size:.85rem;color:var(--text);flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.ks-sc-pcs{font-family:var(--mono);font-size:.72rem;color:var(--muted);flex-shrink:0}
+.ks-sc-goal{margin-top:6px}
+.ks-sc-goal-row{display:flex;justify-content:space-between;margin-bottom:3px}
+.ks-chart{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.ks-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+
+/* ── Prize tier badges ── */
+.gbadge.ultra{background:rgba(180,130,255,.20);color:#c084fc}
+.gbadge.mega {background:rgba(250,200,80,.18);color:#fbbf24}
+.gbadge.super{background:rgba(100,210,255,.18);color:#38bdf8}
+.gbadge.hit  {background:rgba(76,175,125,.18);color:var(--success)}
+.gbadge.miss {background:rgba(224,82,82,.12);color:var(--danger)}
+.gk-hint{font-size:.68rem;color:var(--muted);margin-top:3px}
+.gk-kiosk-lbl{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .kiosk-progress-grid{grid-template-columns:1fr}
+  .ks-goals{grid-template-columns:1fr}
+  .ks-stats{grid-template-columns:repeat(2,1fr)}
+  .ks-sellers{grid-template-columns:1fr 1fr}
+}
+@media(max-width:600px){
+  .kiosk-progress-grid{grid-template-columns:1fr}
+  .ks-goals{grid-template-columns:1fr}
+  .ks-stats{grid-template-columns:repeat(2,1fr)}
+  .ks-sellers{grid-template-columns:1fr}
+  .ks-header{flex-direction:column;gap:8px}
+  .ks-total{text-align:left}
+  .period-btn{font-size:.7rem;padding:0 10px}
+}
+
 </style>
 </head>
 <body>
@@ -349,10 +426,11 @@ tr.inactive td{opacity:.35}
 <header class="topbar">
   <div class="logo">Saint Germain</div>
   <nav class="tabs">
-    <button class="tab on"         onclick="nav('geral',this)">Painel Geral</button>
-    <button class="tab"            onclick="nav('kiosques',this)">Quiosques</button>
-    <button class="tab admin-only" id="tabImport" onclick="nav('import',this)">Importar</button>
-    <button class="tab admin-only" id="tabGoals"  onclick="nav('goals',this)">Metas</button>
+    <button class="tab on"              onclick="nav('geral',this)">Painel Geral</button>
+    <button class="tab"                 onclick="nav('kiosques',this)">Quiosques</button>
+    <button class="tab admin-only" id="tabConsolidado" onclick="nav('consolidado',this)">Consolidado</button>
+    <button class="tab admin-only" id="tabImport"      onclick="nav('import',this)">Importar</button>
+    <button class="tab admin-only" id="tabGoals"       onclick="nav('goals',this)">Metas</button>
   </nav>
   <div class="bar-r">
     <div class="chip" id="chip"><span class="chip-name" id="chipName"></span><button onclick="window._doLogout()">sair</button></div>
@@ -361,13 +439,21 @@ tr.inactive td{opacity:.35}
 </header>
 
 <section class="pnl on" id="pnl-geral">
-  <div class="h1">Visão Geral</div><div class="sub">Consolidado de todos os quiosques</div>
-  <div id="geralBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div><div class="eh">Conectando ao Firebase</div></div></div>
+  <div class="h1">Painel Geral</div>
+  <div class="sub">Progresso e metas por quiosque</div>
+  <div id="geralBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
 </section>
 
 <section class="pnl" id="pnl-kiosques">
-  <div class="h1">Quiosques</div><div class="sub">Desempenho por unidade e vendedor</div>
-  <div id="kiosquesBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div><div class="eh">Conectando ao Firebase</div></div></div>
+  <div class="h1">Quiosques</div>
+  <div class="sub">Desempenho por unidade e vendedor</div>
+  <div id="kiosquesBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
+</section>
+
+<section class="pnl" id="pnl-consolidado">
+  <div class="h1">Consolidado</div>
+  <div class="sub">Visão financeira completa · acesso restrito</div>
+  <div id="consolidadoBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
 </section>
 
 <section class="pnl" id="pnl-import">
@@ -392,14 +478,9 @@ tr.inactive td{opacity:.35}
     <div class="modal-handle"></div>
     <div class="mt">Acesso admin</div>
     <div class="ms2">Use as credenciais do Firebase Authentication</div>
-    <div class="fld"><label class="fl">Email</label><input class="fi2" id="inU" type="email" placeholder="admin@exemplo.com" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div class="fld"><label class="fl">Senha</label><input class="fi2" id="inP" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div class="me" id="me"></div>
-    <button class="bm" id="btnLoginSubmit" onclick="doLogin()">Entrar</button>
-  </div>
-</div>
+    <div class="fld"><label class="fl">Email</label><input class="fi2" id="inU" type="email" placeholder="admin@exemplo.com" onkeydown="if(event.key==='Enter<script>
 
-<script>
+
 // ══════════════════════════════════════════════════════════
 //  GLOBAL STATE
 // ══════════════════════════════════════════════════════════
@@ -408,14 +489,13 @@ tr.inactive td{opacity:.35}
 window._store = { period:null, importedAt:null, gtLiq:0, gtPecas:0, kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
 window._goals = { kiosks:{}, sellers:{} };
 // goals.kiosks[kioskName] = {
-//   stdMonthly: number,         // padrão mensal por vendedor (R$)
-//   stdWeekly:  { 'YYYY-MM-DD': number },  // padrão por semana (keyed by Monday)
-//   activeSellers: ['name1','name2'],  // vendedores marcados como ativos
+//   monthlyTotal:   number,               // meta mensal TOTAL do quiosque (R$)
+//   weeklyDefault:  number,               // meta semanal padrão (R$), repete toda semana
+//   weeklyOverride: { 'YYYY-MM-DD': n },  // override por semana específica (Monday key)
+//   activeSellers:  ['name1', ...],       // vendedores ativos (meta ÷ n° ativos)
 // }
-// goals.sellers[sellerName] = {
-//   overrideMonthly: { 'YYYY-MM': number },  // override individual (opcional)
-//   overrideWeekly:  { 'YYYY-MM-DD': number },
-// }
+// Meta individual vendedor = meta_quiosque / n° ativos
+// Faixas de premiação semanal: 100%=R$50 | 120%=R$100 | 140%=R$150 | 160%=R$200
 
 window._isAdmin = false;
 
@@ -438,12 +518,13 @@ function showEmptyState(){
 
 // ── NAV ──
 function nav(id,btn){
-  if((id==='import'||id==='goals')&&!window._isAdmin){openLogin();return;}
+  if((id==='import'||id==='goals'||id==='consolidado')&&!window._isAdmin){openLogin();return;}
   document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.getElementById('pnl-'+id).classList.add('on');
   if(btn) btn.classList.add('on');
   if(id==='goals') renderGoals();
+  if(id==='consolidado') renderConsolidado();
 }
 
 // ── MODAL LOGIN ──
@@ -572,46 +653,59 @@ function sWeekLiq(kName,sName,mon,sun){
   return s;
 }
 
-// ── Goal computation ──────────────────────────────────────
-// Returns list of active sellers for a kiosk
+// ── Goal computation ────────────────────────────────────
+// Active sellers for a kiosk (falls back to all if none configured)
 function activeSellers(kName){
   const G=goals.kiosks[kName];
-  if(!G?.activeSellers?.length)return[];
-  return G.activeSellers;
+  const configured=G?.activeSellers||[];
+  if(configured.length>0) return configured;
+  return Object.keys(store.kiosks[kName]?.sellers||{});
 }
 
-// Seller monthly goal: override > stdMonthly of their kiosk
-function sellerMonthGoal(sName,kName,monthKey){
-  // Override individual por mês
-  const ov=goals.sellers[sName]?.overrideMonthly?.[monthKey]||0;
-  if(ov)return ov;
-  // Padrão do quiosque
-  return goals.kiosks[kName]?.stdMonthly||0;
+// Kiosk monthly goal (total configured directly)
+function kioskMonthGoal(kName){
+  return goals.kiosks[kName]?.monthlyTotal||0;
 }
 
-// Seller weekly goal: override > stdWeekly of their kiosk for that week
-function sellerWeekGoal(sName,kName,monKey){
-  const ov=goals.sellers[sName]?.overrideWeekly?.[monKey]||0;
-  if(ov)return ov;
-  return goals.kiosks[kName]?.stdWeekly?.[monKey]||0;
-}
-
-// Kiosk monthly goal = stdMonthly × n° active sellers configured for month
-function kioskMonthGoal(kName,monthKey){
-  const G=goals.kiosks[kName];if(!G)return 0;
-  const std=G.stdMonthly||0;if(!std)return 0;
-  const active=activeSellers(kName);
-  const n=active.length||Object.keys(store.kiosks[kName]?.sellers||{}).length;
-  return std*n;
-}
-
-// Kiosk weekly goal = stdWeekly[monKey] × n° active sellers for that week
+// Kiosk weekly goal for a specific Monday key
+// Uses weeklyOverride if set, else weeklyDefault
 function kioskWeekGoal(kName,monKey){
   const G=goals.kiosks[kName];if(!G)return 0;
-  const std=G.stdWeekly?.[monKey]||0;if(!std)return 0;
-  const active=activeSellers(kName);
-  const n=active.length||Object.keys(store.kiosks[kName]?.sellers||{}).length;
-  return std*n;
+  return G.weeklyOverride?.[monKey]||G.weeklyDefault||0;
+}
+
+// Seller monthly goal = kiosk total ÷ n° active sellers
+function sellerMonthGoal(kName){
+  const total=kioskMonthGoal(kName);if(!total)return 0;
+  const n=activeSellers(kName).length;if(!n)return 0;
+  return total/n;
+}
+
+// Seller weekly goal = kiosk weekly ÷ n° active sellers
+function sellerWeekGoal(kName,monKey){
+  const total=kioskWeekGoal(kName,monKey);if(!total)return 0;
+  const n=activeSellers(kName).length;if(!n)return 0;
+  return total/n;
+}
+
+// Premiação semanal por faixa atingida
+const PRIZE_TIERS=[
+  {pct:160,label:'Ultra', prize:200},
+  {pct:140,label:'Mega',  prize:150},
+  {pct:120,label:'Super', prize:100},
+  {pct:100,label:'Meta',  prize:50},
+];
+function prizeForPct(pct){
+  for(const t of PRIZE_TIERS) if(pct>=t.pct) return t;
+  return null;
+}
+function prizeBadge(actual,goal){
+  if(!goal||actual<=0)return'';
+  const pct=(actual/goal)*100;
+  const tier=prizeForPct(pct);
+  if(!tier)return`<span class="gbadge miss">${pct.toFixed(0)}%</span>`;
+  const cls=tier.label==='Ultra'?'ultra':tier.label==='Mega'?'mega':tier.label==='Super'?'super':'hit';
+  return`<span class="gbadge ${cls}">${tier.label} · R$${tier.prize}</span>`;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -724,66 +818,231 @@ async function processCSV(){
 // ══════════════════════════════════════════════════════════
 //  RENDER GERAL
 // ══════════════════════════════════════════════════════════
-function renderGeral(){
-  const ks=Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq);
-  if(!ks.length){showEmptyState();return;}
-  const tot=store.gtLiq||ks.reduce((s,k)=>s+k.liq,0);
-  const totP=store.gtPecas||ks.reduce((s,k)=>s+k.pecas,0);
-  const totS=Object.keys(store.sellers).length;
-  const tk=totP>0?(tot/totP):0;
-  const wctx=getWeekCtx();
-  const mKey=wctx?.monthKey||'';
-  const wKey=wctx?.monKey||'';
+// ══════════════════════════════════════════════════════════
+//  RENDER GERAL (público — foco em metas, sem valores totais)
+// ══════════════════════════════════════════════════════════
 
-  let h=`<div class="kpi-g">
-    <div class="kpi"><div class="kpi-l">Faturamento Líquido</div><div class="kpi-v">${R(tot)}</div><div class="kpi-m">${store.period||'—'}</div></div>
+// Period selector state: 'month' | week monKey (YYYY-MM-DD)
+let geralPeriod = 'month';   // default: mês completo
+
+function setGeralPeriod(val) {
+  geralPeriod = val;
+  renderGeral();
+}
+
+// Helper: get the correct week context based on geralPeriod
+function getPeriodCtx() {
+  const wctx = getWeekCtx();
+  if (geralPeriod === 'month') {
+    // Use current month key from last data date
+    return { type:'month', monthKey: wctx?.monthKey || '', wctx };
+  }
+  // geralPeriod is a monKey (YYYY-MM-DD)
+  const mon = new Date(geralPeriod + 'T00:00:00');
+  const sun = new Date(mon.getTime() + 6*86400000);
+  const fmt = d => d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  return { type:'week', monKey: geralPeriod, monday: mon, sunday: sun,
+           label: `${fmt(mon)} – ${fmt(sun)}`, monthKey: geralPeriod.slice(0,7), wctx };
+}
+
+function renderGeral() {
+  const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
+  if (!ks.length) { showEmptyState(); return; }
+
+  const wctx = getWeekCtx();
+  const pctx = getPeriodCtx();
+
+  // Build period selector
+  const allWeeks = buildAvailableWeeks();
+  let h = `<div class="period-bar">
+    <button class="period-btn${geralPeriod==='month'?' on':''}" onclick="setGeralPeriod('month')">
+      Mês completo${wctx?' · '+monthLabel(wctx.monthKey):''}
+    </button>`;
+  allWeeks.forEach(w => {
+    h += `<button class="period-btn${geralPeriod===w.monKey?' on':''}" onclick="setGeralPeriod('${w.monKey}')">
+      ${w.shortLabel}
+    </button>`;
+  });
+  h += `</div>`;
+
+  // ── Per-kiosk progress cards ──────────────────────────
+  h += `<div class="kiosk-progress-grid">`;
+
+  ks.forEach(k => {
+    const kName   = k.name;
+    const active  = activeSellers(kName);
+    const nActive = active.length || Object.keys(k.sellers).length;
+    const isMonth = pctx.type === 'month';
+
+    // Kiosk goal & actual for selected period
+    let kGoal, kActual;
+    if (isMonth) {
+      kGoal   = kioskMonthGoal(kName);
+      kActual = k.liq;
+    } else {
+      kGoal   = kioskWeekGoal(kName, pctx.monKey);
+      kActual = kWeekLiq(kName, pctx.monday, pctx.sunday);
+    }
+    const kPct = kGoal > 0 ? (kActual/kGoal)*100 : 0;
+
+    h += `<div class="kpg-card">
+      <div class="kpg-head">
+        <div class="kpg-name">${sK(kName)}</div>
+        <div class="kpg-meta">${nActive} ativos · ${isMonth ? monthLabel(pctx.monthKey) : pctx.label}</div>
+      </div>`;
+
+    if (kGoal) {
+      h += `<div class="kpg-pct" style="color:${gColor(kPct)}">${kPct.toFixed(0)}%</div>
+      <div class="kpg-bar-wrap">
+        <div class="kpg-bar"><div class="kpg-fill" style="width:${Math.min(kPct,100)}%;background:${gColor(kPct)}"></div></div>
+      </div>
+      <div class="kpg-numbers">
+        <span class="kpg-pieces">${k.pecas.toLocaleString('pt-BR')} pçs</span>
+        <span class="kpg-goal-lbl">meta ${R(kGoal)}</span>
+      </div>`;
+    } else {
+      h += `<div style="font-size:.72rem;color:var(--muted);margin:8px 0">Meta não configurada</div>
+      <div class="kpg-numbers"><span class="kpg-pieces">${k.pecas.toLocaleString('pt-BR')} pçs</span></div>`;
+    }
+
+    // Seller rows inside kiosk card
+    const sls = Object.values(k.sellers)
+      .filter(s => !active.length || active.includes(s.name))
+      .sort((a,b) => (b.liq||0)-(a.liq||0));
+
+    h += `<div class="kpg-sellers">`;
+    sls.forEach((s, si) => {
+      let sGoal, sActual;
+      if (isMonth) {
+        sGoal   = sellerMonthGoal(kName);
+        sActual = s.liq || 0;
+      } else {
+        sGoal   = sellerWeekGoal(kName, pctx.monKey);
+        sActual = sWeekLiq(kName, s.name, pctx.monday, pctx.sunday);
+      }
+      const sPct   = sGoal > 0 ? (sActual/sGoal)*100 : 0;
+      const prize  = !isMonth ? prizeForPct(sPct) : null;  // prizes only weekly
+      const mPrize = isMonth ? prizeForPctMonthly(sPct) : null;
+
+      h += `<div class="kpg-seller">
+        <div class="kpg-seller-name">
+          ${si===0?'<span class="star">★</span>':''}${s.name}
+          ${prize ? `<span class="gbadge ${prize.label.toLowerCase()}">${prize.label} +R$${prize.prize}</span>` : ''}
+          ${mPrize ? `<span class="gbadge ${mPrize.label.toLowerCase()}">${mPrize.label} +R$${mPrize.prize}</span>` : ''}
+        </div>
+        <div class="kpg-seller-stats">
+          <span class="kpg-seller-pcs">${s.pecas||0} pçs</span>
+          ${sGoal ? `<span class="kpg-seller-pct" style="color:${gColor(sPct)}">${sPct.toFixed(0)}%</span>` : ''}
+        </div>
+        ${sGoal ? `<div class="mb"><div class="mf" style="width:${Math.min(sPct,100)}%;background:${gColor(sPct)}"></div></div>` : ''}
+      </div>`;
+    });
+    h += `</div></div>`;  // kpg-sellers + kpg-card
+  });
+  h += `</div>`;  // kiosk-progress-grid
+
+  h += `<div class="meta-line">Importado em ${store.importedAt||'—'}</div>`;
+  document.getElementById('geralBody').innerHTML = h;
+  destroyChart('cBar'); destroyChart('cPie');
+}
+
+// Monthly prize tiers (separate from weekly)
+const PRIZE_TIERS_MONTHLY = [
+  {pct:160, label:'Ultra', prize:800},
+  {pct:140, label:'Mega',  prize:600},
+  {pct:120, label:'Super', prize:400},
+  {pct:100, label:'Meta',  prize:200},
+];
+function prizeForPctMonthly(pct) {
+  for (const t of PRIZE_TIERS_MONTHLY) if (pct >= t.pct) return t;
+  return null;
+}
+
+// Build list of weeks that have data in current month
+function buildAvailableWeeks() {
+  const wctx = getWeekCtx();
+  if (!wctx) return [];
+  const [yr, mo] = wctx.monthKey.split('-').map(Number);
+  const weeks = weeksInMonth(yr, mo);
+  // Only include weeks that have at least some data
+  const dateSet = new Set(store.dateRange || []);
+  return weeks
+    .filter(w => {
+      // Check if any date in the store falls in this week
+      const mon = new Date(w.monKey + 'T00:00:00');
+      const sun = new Date(mon.getTime() + 6*86400000);
+      return [...dateSet].some(d => {
+        const dt = new Date(d + 'T00:00:00');
+        return dt >= mon && dt <= sun;
+      });
+    })
+    .map((w, i) => ({ ...w, shortLabel: `S${i+1} ${w.label}` }));
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER CONSOLIDADO (admin-only — gráficos + totais)
+// ══════════════════════════════════════════════════════════
+function renderConsolidado() {
+  const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
+  if (!ks.length) {
+    document.getElementById('consolidadoBody').innerHTML =
+      '<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado</div></div>';
+    return;
+  }
+  const tot  = store.gtLiq  || ks.reduce((s,k) => s+k.liq, 0);
+  const totP = store.gtPecas || ks.reduce((s,k) => s+k.pecas, 0);
+  const totS = Object.keys(store.sellers).length;
+  const tk   = totP > 0 ? tot/totP : 0;
+  const wctx = getWeekCtx();
+  const wKey = wctx?.monKey || '';
+
+  let h = `<div class="kpi-g">
+    <div class="kpi"><div class="kpi-l">Faturamento Líquido Total</div><div class="kpi-v">${R(tot)}</div><div class="kpi-m">${store.period||'—'}</div></div>
     <div class="kpi"><div class="kpi-l">Ticket Médio</div><div class="kpi-v">${R(tk)}</div><div class="kpi-m">${totP.toLocaleString('pt-BR')} peças</div></div>
     <div class="kpi"><div class="kpi-l">Vendedores</div><div class="kpi-v">${totS}</div><div class="kpi-m">${ks.length} quiosques</div></div>
     <div class="kpi"><div class="kpi-l">Semana atual</div><div class="kpi-v" style="font-size:1rem">${wctx?wctx.label:'—'}</div><div class="kpi-m">Seg → Dom</div></div>
   </div>
   <div class="cr">
     <div class="card"><div class="ct">Faturamento Líquido por Quiosque</div><div class="cs">${store.period||'—'}</div><canvas id="cBar" height="160"></canvas></div>
-    <div class="card"><div class="ct">Participação</div><div class="cs">% do total</div><canvas id="cPie" height="160"></canvas></div>
+    <div class="card"><div class="ct">Participação</div><div class="cs">% do total líquido</div><canvas id="cPie" height="160"></canvas></div>
   </div>`;
 
-  // Kiosks table
-  h+=`<div class="h2">Quiosques</div><div class="tw tw-scroll"><table><thead><tr>
+  // Quiosques table (com faturamento)
+  h += `<div class="h2">Quiosques</div><div class="tw tw-scroll"><table><thead><tr>
     <th>Quiosque</th><th class="num">Faturamento Líquido</th><th class="num">Peças</th><th class="num">Ticket</th>
     <th>Meta Mensal</th>${wctx?'<th>Meta Semanal</th>':''}
   </tr></thead><tbody>`;
-  ks.forEach(k=>{
-    const sc=Object.keys(k.sellers).length;
-    const ktk=k.pecas>0?k.liq/k.pecas:0;
-    const gm=kioskMonthGoal(k.name,mKey);
-    const gw=kioskWeekGoal(k.name,wKey);
-    const wLiq=wctx?kWeekLiq(k.name,wctx.monday,wctx.sunday):0;
-    h+=`<tr>
-      <td><strong>${sK(k.name)}</strong><br><span style="font-size:.7rem;color:var(--muted)">${sc} vendedores</span></td>
+  ks.forEach(k => {
+    const sc  = Object.keys(k.sellers).length;
+    const ktk = k.pecas > 0 ? k.liq/k.pecas : 0;
+    const gm  = kioskMonthGoal(k.name);
+    const gw  = kioskWeekGoal(k.name, wKey);
+    const wLiq = wctx ? kWeekLiq(k.name,wctx.monday,wctx.sunday) : 0;
+    h += `<tr>
+      <td><strong>${sK(k.name)}</strong><br><span style="font-size:.7rem;color:var(--muted)">${sc} vend.</span></td>
       <td class="mo num">${R(k.liq)}</td><td class="num">${k.pecas.toLocaleString('pt-BR')}</td>
       <td class="mo num">${ktk>0?R(ktk):'—'}</td>
       <td>${gBar(k.liq,gm)}</td>
       ${wctx?`<td>${gBarWithAccum(wLiq,gw,wLiq)}</td>`:''}
     </tr>`;
   });
-  h+=`</tbody></table></div>`;
+  h += `</tbody></table></div>`;
 
-  // Sellers table — only active sellers, inactive shown faded
-  const allSellers=Object.values(store.sellers).sort((a,b)=>b.liq-a.liq);
-  h+=`<div class="h2">Vendedores</div><div class="tw tw-scroll"><table><thead><tr>
+  // Vendedores table (com faturamento)
+  const allS = Object.values(store.sellers).sort((a,b) => b.liq - a.liq);
+  h += `<div class="h2">Vendedores</div><div class="tw tw-scroll"><table><thead><tr>
     <th>#</th><th>Vendedor</th><th>Quiosque</th>
     <th class="num">Faturamento Líquido</th><th class="num">Peças</th><th class="num">Dias</th><th class="num">Ticket</th>
-    <th>Meta Mensal</th>${wctx?'<th>Meta Semanal</th>':''}
+    <th>Meta Mensal</th>${wctx?'<th>Meta Semanal · Premiação</th>':''}
   </tr></thead><tbody>`;
-  let rank=0;
-  allSellers.forEach(s=>{
-    const kName=s.kiosk||'';
-    const isActive=activeSellers(kName).includes(s.name);
-    // if no sellers configured yet, show all; once configured, active ones ranked
-    const configured=activeSellers(kName).length>0;
-    if(configured&&!isActive){
-      // Show inactive faded at bottom
-      const tk2=(s.pecas||0)>0?(s.liq||0)/s.pecas:0;
-      h+=`<tr class="inactive"><td class="rank-num">—</td><td>${s.name}<span class="tag-inactive">inativo</span></td>
+  let rank = 0;
+  allS.forEach(s => {
+    const kName = s.kiosk||'';
+    const cfg   = goals.kiosks[kName]?.activeSellers?.length > 0;
+    const isAct = !cfg || activeSellers(kName).includes(s.name);
+    if (cfg && !isAct) {
+      const tk2 = (s.pecas||0)>0?(s.liq||0)/s.pecas:0;
+      h += `<tr class="inactive"><td class="rank-num">—</td><td>${s.name}<span class="tag-inactive">inativo</span></td>
         <td style="font-size:.8rem;color:var(--muted)">${sK(kName)}</td>
         <td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td>
         <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
@@ -792,95 +1051,192 @@ function renderGeral(){
       return;
     }
     rank++;
-    const tk2=(s.pecas||0)>0?(s.liq||0)/s.pecas:0;
-    const gm=sellerMonthGoal(s.name,kName,mKey);
-    const gw=sellerWeekGoal(s.name,kName,wKey);
-    const wLiq=wctx?sWeekLiq(kName,s.name,wctx.monday,wctx.sunday):0;
-    h+=`<tr>
-      <td class="rank-num">${rank}</td>
-      <td><strong>${s.name}</strong></td>
+    const tk2 = (s.pecas||0)>0?(s.liq||0)/s.pecas:0;
+    const gm  = sellerMonthGoal(kName);
+    const gw  = sellerWeekGoal(kName, wKey);
+    const wLiq = wctx ? sWeekLiq(kName,s.name,wctx.monday,wctx.sunday) : 0;
+    h += `<tr>
+      <td class="rank-num">${rank}</td><td><strong>${s.name}</strong></td>
       <td style="color:var(--muted);font-size:.8rem">${sK(kName)}</td>
       <td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td>
       <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
       <td>${gBar(s.liq||0,gm)}</td>
-      ${wctx?`<td>${gBarWithAccum(wLiq,gw,wLiq)}</td>`:''}
+      ${wctx?`<td>${prizeBadge(wLiq,gw)+gBarWithAccum(wLiq,gw,wLiq)}</td>`:''}
     </tr>`;
   });
-  h+=`</tbody></table></div>`;
-  h+=`<div class="meta-line">Importado em ${store.importedAt||'—'}</div>`;
+  h += `</tbody></table></div>`;
+  h += `<div class="meta-line">Importado em ${store.importedAt||'—'}</div>`;
 
-  document.getElementById('geralBody').innerHTML=h;
-  destroyChart('cBar');destroyChart('cPie');
-  setTimeout(()=>{
-    const labels=ks.map(k=>sK(k.name));
-    chartInstances['cBar']=new Chart(document.getElementById('cBar'),{type:'bar',data:{labels,datasets:[{data:ks.map(k=>k.liq),backgroundColor:CLRS,borderRadius:4,borderSkipped:false}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:10}}},y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:10},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}}}});
-    chartInstances['cPie']=new Chart(document.getElementById('cPie'),{type:'doughnut',data:{labels,datasets:[{data:ks.map(k=>k.liq),backgroundColor:CLRS,borderColor:'#000',borderWidth:2}]},options:{responsive:true,cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:'#666',font:{family:'DM Mono',size:10},padding:14}}}}});
-  },80);
+  document.getElementById('consolidadoBody').innerHTML = h;
+  destroyChart('cBar'); destroyChart('cPie');
+
+  setTimeout(() => {
+    const labels = ks.map(k => sK(k.name));
+    chartInstances['cBar'] = new Chart(document.getElementById('cBar'), {
+      type:'bar', data:{labels,datasets:[{data:ks.map(k=>k.liq),backgroundColor:CLRS,borderRadius:4,borderSkipped:false}]},
+      options:{responsive:true,plugins:{legend:{display:false}},scales:{
+        x:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:10}}},
+        y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:10},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
+      }}
+    });
+    chartInstances['cPie'] = new Chart(document.getElementById('cPie'), {
+      type:'doughnut', data:{labels,datasets:[{data:ks.map(k=>k.liq),backgroundColor:CLRS,borderColor:'#000',borderWidth:2}]},
+      options:{responsive:true,cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:'#666',font:{family:'DM Mono',size:10},padding:14}}}}
+    });
+  }, 80);
 }
 
 // ══════════════════════════════════════════════════════════
-//  RENDER KIOSQUES
+//  RENDER QUIOSQUES (responsivo, sem overflow)
 // ══════════════════════════════════════════════════════════
-function renderKiosques(){
-  const ks=Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq);
-  if(!ks.length){document.getElementById('kiosquesBody').innerHTML='<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado</div></div>';return;}
-  const wctx=getWeekCtx();
-  const mKey=wctx?.monthKey||'';
-  const wKey=wctx?.monKey||'';
-  let h='<div class="kg">';
-  ks.forEach((k,ki)=>{
-    const sls=Object.values(k.sellers).sort((a,b)=>(b.liq||0)-(a.liq||0));
-    const tk=k.pecas>0?k.liq/k.pecas:0;
-    const dates=Object.keys(k.byDate).sort();
-    const gm=kioskMonthGoal(k.name,mKey);
-    const gw=kioskWeekGoal(k.name,wKey);
-    const wLiq=wctx?kWeekLiq(k.name,wctx.monday,wctx.sunday):0;
-    const pM=(gm>0)?Math.min((k.liq/gm)*100,100):0;
-    const pW=(gw>0)?Math.min((wLiq/gw)*100,100):0;
+function renderKiosques() {
+  const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
+  if (!ks.length) {
+    document.getElementById('kiosquesBody').innerHTML =
+      '<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado</div></div>';
+    return;
+  }
+  const wctx = getWeekCtx();
+  const wKey = wctx?.monKey || '';
 
-    h+=`<div class="kc"><div class="kch"><div><div class="kcn">${sK(k.name)}</div><div class="kct">${k.name}</div></div><div class="ktot"><div class="ktl">Faturamento Líquido</div><div class="ktv">${R(k.liq)}</div></div></div>`;
-    if(gm||gw){
-      h+=`<div class="kgoal">`;
-      if(gm)h+=`<div class="kgoal-item"><div class="kgoal-lbl">Meta Mensal</div><div class="kgoal-row"><span class="kgoal-val">${R(k.liq)}</span><span class="kgoal-pct" style="color:${gColor(pM)}">${pM.toFixed(0)}%</span></div><div style="font-size:.68rem;color:var(--muted);margin-bottom:5px">de ${R(gm)}</div><div class="kgoal-bar"><div class="kgoal-fill" style="width:${pM}%;background:${gColor(pM)}"></div></div></div>`;
-      if(gw&&wctx)h+=`<div class="kgoal-item"><div class="kgoal-lbl">Semana · ${wctx.label}</div><div class="kgoal-row"><span class="kgoal-val">${R(wLiq)}</span><span class="kgoal-pct" style="color:${gColor(pW)}">${pW.toFixed(0)}%</span></div><div style="font-size:.68rem;color:var(--muted);margin-bottom:5px">de ${R(gw)}</div><div class="kgoal-bar"><div class="kgoal-fill" style="width:${pW}%;background:${gColor(pW)}"></div></div></div>`;
-      h+=`</div>`;
+  let h = '';
+  ks.forEach((k, ki) => {
+    const sls    = Object.values(k.sellers).sort((a,b) => (b.liq||0)-(a.liq||0));
+    const dates  = Object.keys(k.byDate).sort();
+    const nActive= activeSellers(k.name).length || Object.keys(k.sellers).length;
+    const gm     = kioskMonthGoal(k.name);
+    const gw     = kioskWeekGoal(k.name, wKey);
+    const wLiq   = wctx ? kWeekLiq(k.name, wctx.monday, wctx.sunday) : 0;
+    const pM     = gm>0 ? Math.min((k.liq/gm)*100,100) : 0;
+    const pW     = gw>0 ? Math.min((wLiq/gw)*100,100) : 0;
+
+    h += `<div class="kiosk-section">
+      <div class="ks-header">
+        <div>
+          <div class="ks-name">${sK(k.name)}</div>
+          <div class="ks-sub">${k.name} · ${nActive} vendedores ativos</div>
+        </div>
+        <div class="ks-total">
+          <div class="ks-total-lbl">Faturamento Líquido</div>
+          <div class="ks-total-val">${R(k.liq)}</div>
+        </div>
+      </div>`;
+
+    // Goal blocks
+    if (gm || gw) {
+      h += `<div class="ks-goals">`;
+      if (gm) {
+        h += `<div class="ks-goal-item">
+          <div class="ks-goal-lbl">Meta Mensal <span class="ks-goal-n">${nActive} vend.</span></div>
+          <div class="ks-goal-row">
+            <span class="ks-goal-val">${R(k.liq)}</span>
+            <span class="ks-goal-pct" style="color:${gColor(pM)}">${pM.toFixed(0)}%</span>
+          </div>
+          <div class="ks-goal-sub">de ${R(gm)}</div>
+          <div class="ks-goal-bar"><div class="ks-goal-fill" style="width:${pM}%;background:${gColor(pM)}"></div></div>
+        </div>`;
+      }
+      if (gw && wctx) {
+        h += `<div class="ks-goal-item">
+          <div class="ks-goal-lbl">Semana · ${wctx.label} <span class="ks-goal-n">${nActive} vend.</span></div>
+          <div class="ks-goal-row">
+            <span class="ks-goal-val">${R(wLiq)}</span>
+            <span class="ks-goal-pct" style="color:${gColor(pW)}">${pW.toFixed(0)}%</span>
+          </div>
+          <div class="ks-goal-sub">de ${R(gw)}</div>
+          <div class="ks-goal-bar"><div class="ks-goal-fill" style="width:${pW}%;background:${gColor(pW)}"></div></div>
+        </div>`;
+      }
+      h += `</div>`;
     }
-    h+=`<div class="ms-g"><div class="ms"><div class="ms-l">Peças</div><div class="ms-v">${k.pecas.toLocaleString('pt-BR')}</div><div class="ms-s">vendidas</div></div><div class="ms"><div class="ms-l">Ticket</div><div class="ms-v">${tk>0?R(tk):'—'}</div><div class="ms-s">${sls.length} vendedores</div></div><div class="ms"><div class="ms-l">Semana</div><div class="ms-v">${wctx?R(wLiq):'—'}</div><div class="ms-s">${wctx?wctx.label:'—'}</div></div></div>`;
-    h+=`<div class="sd">Vendedores</div><div class="tw tw-scroll" style="margin:0"><table><thead><tr><th>Vendedor</th><th class="num">Líquido</th><th class="num">Peças</th><th class="num">Dias</th><th class="num">Ticket</th><th>Meta Mensal</th>${wctx?'<th>Meta Semanal</th>':''}</tr></thead><tbody>`;
-    sls.forEach((s,si)=>{
-      const kName=k.name;
-      const configured=activeSellers(kName).length>0;
-      const isActive=!configured||activeSellers(kName).includes(s.name);
-      const tk2=(s.pecas||0)>0?(s.liq||0)/s.pecas:0;
-      const sgm=sellerMonthGoal(s.name,kName,mKey);
-      const sgw=sellerWeekGoal(s.name,kName,wKey);
-      const swL=wctx?sWeekLiq(kName,s.name,wctx.monday,wctx.sunday):0;
-      h+=`<tr${!isActive?' class="inactive"':''}>
-        <td>${si===0&&isActive?'<span class="star">★</span>':''}<strong>${s.name}</strong>${!isActive?'<span class="tag-inactive">inativo</span>':''}</td>
-        <td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td>
-        <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
-        <td>${isActive?gBar(s.liq||0,sgm):'—'}</td>
-        ${wctx?`<td>${isActive?gBarWithAccum(swL,sgw,swL):'—'}</td>`:''}
-      </tr>`;
+
+    // Stat pills
+    const tk = k.pecas > 0 ? k.liq/k.pecas : 0;
+    h += `<div class="ks-stats">
+      <div class="ks-stat"><div class="ks-stat-l">Peças</div><div class="ks-stat-v">${k.pecas.toLocaleString('pt-BR')}</div></div>
+      <div class="ks-stat"><div class="ks-stat-l">Ticket</div><div class="ks-stat-v">${tk>0?R(tk):'—'}</div></div>
+      ${wctx?`<div class="ks-stat"><div class="ks-stat-l">Semana</div><div class="ks-stat-v">${R(wLiq)}</div></div>`:''}
+    </div>`;
+
+    // Seller cards — responsive grid, no table
+    h += `<div class="ks-sellers-lbl">Vendedores</div>
+    <div class="ks-sellers">`;
+
+    sls.forEach((s, si) => {
+      const kName  = k.name;
+      const cfg    = activeSellers(kName).length > 0;
+      const isAct  = !cfg || activeSellers(kName).includes(s.name);
+      const sgm    = sellerMonthGoal(kName);
+      const sgw    = sellerWeekGoal(kName, wKey);
+      const swL    = wctx ? sWeekLiq(kName, s.name, wctx.monday, wctx.sunday) : 0;
+      const spM    = sgm > 0 ? (s.liq||0)/sgm*100 : 0;
+      const spW    = sgw > 0 ? swL/sgw*100 : 0;
+      const prize  = sgw>0 ? prizeForPct(spW) : null;
+      const mPrize = sgm>0 ? prizeForPctMonthly(spM) : null;
+
+      h += `<div class="ks-seller-card${!isAct?' inactive':''}">
+        <div class="ks-sc-head">
+          <span class="ks-sc-name">${si===0&&isAct?'<span class="star">★</span>':''}${s.name}${!isAct?'<span class="tag-inactive">inativo</span>':''}</span>
+          <span class="ks-sc-pcs">${s.pecas||0} pçs</span>
+        </div>`;
+
+      if (isAct) {
+        if (sgm) {
+          h += `<div class="ks-sc-goal">
+            <div class="ks-sc-goal-row">
+              <span style="font-size:.65rem;color:var(--muted)">Mês ${R(s.liq||0)}</span>
+              <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spM)}">${spM.toFixed(0)}%</span>
+            </div>
+            <div class="mb"><div class="mf" style="width:${Math.min(spM,100)}%;background:${gColor(spM)}"></div></div>
+            ${mPrize?`<span class="gbadge ${mPrize.label.toLowerCase()}" style="margin-top:4px">${mPrize.label} +R$${mPrize.prize}</span>`:''}
+          </div>`;
+        }
+        if (sgw && wctx) {
+          h += `<div class="ks-sc-goal">
+            <div class="ks-sc-goal-row">
+              <span style="font-size:.65rem;color:var(--muted)">Sem ${R(swL)}</span>
+              <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spW)}">${spW.toFixed(0)}%</span>
+            </div>
+            <div class="mb"><div class="mf" style="width:${Math.min(spW,100)}%;background:${gColor(spW)}"></div></div>
+            ${prize?`<span class="gbadge ${prize.label.toLowerCase()}" style="margin-top:4px">${prize.label} +R$${prize.prize}</span>`:''}
+          </div>`;
+        }
+      }
+      h += `</div>`;  // ks-seller-card
     });
-    h+=`</tbody></table></div>`;
-    if(dates.length>1)h+=`<div class="kcc"><div class="kcc-l">Faturamento Líquido Diário</div><canvas id="cd${ki}" height="70"></canvas></div>`;
-    h+=`</div>`;
+
+    h += `</div>`;  // ks-sellers
+
+    // Daily chart (optional)
+    if (dates.length > 1) {
+      h += `<div class="ks-chart">
+        <div class="ks-chart-lbl">Faturamento Líquido Diário</div>
+        <canvas id="cd${ki}" height="60"></canvas>
+      </div>`;
+    }
+    h += `</div>`;  // kiosk-section
   });
-  h+=`</div>`;
-  document.getElementById('kiosquesBody').innerHTML=h;
-  setTimeout(()=>{
-    ks.forEach((k,ki)=>{
-      const cv=document.getElementById('cd'+ki);if(!cv)return;
+
+  document.getElementById('kiosquesBody').innerHTML = h;
+
+  setTimeout(() => {
+    ks.forEach((k,ki) => {
+      const cv = document.getElementById('cd'+ki); if (!cv) return;
       destroyChart('cd'+ki);
-      const dates=Object.keys(k.byDate).sort();
-      const vals=dates.map(d=>k.byDate[d].liq);
-      chartInstances['cd'+ki]=new Chart(cv,{type:'line',data:{labels:dates.map(fmtDL),datasets:[{data:vals,borderColor:'#fff',backgroundColor:'rgba(255,255,255,.04)',tension:.35,fill:true,pointRadius:2,borderWidth:1.5}]},options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#666',font:{family:'DM Mono',size:9},maxTicksLimit:8}},y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}}}});
+      const dates = Object.keys(k.byDate).sort();
+      const vals  = dates.map(d => k.byDate[d].liq);
+      chartInstances['cd'+ki] = new Chart(cv, {
+        type:'line',
+        data:{labels:dates.map(fmtDL),datasets:[{data:vals,borderColor:'#fff',backgroundColor:'rgba(255,255,255,.04)',tension:.35,fill:true,pointRadius:2,borderWidth:1.5}]},
+        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{
+          x:{grid:{display:false},ticks:{color:'#666',font:{family:'DM Mono',size:9},maxTicksLimit:8}},
+          y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
+        }}
+      });
     });
-  },100);
+  }, 100);
 }
 
-// ── Goals month selection state ──────────────────────────
 let goalsSelMonth = null;
 
 function initGoalsMonth() {
@@ -892,84 +1248,83 @@ function initGoalsMonth() {
 
 function selectGoalsMonth(ym) { goalsSelMonth = ym; renderGoals(); }
 
-// Global registry for safe index-based callbacks (avoids JSON.stringify in HTML attrs)
+// ── Global registry (safe integer indices for HTML attrs) ──
 let _reg = { kiosks:[], sellers:[] };
 function _ki(kn){ let i=_reg.kiosks.indexOf(kn); if(i<0){i=_reg.kiosks.length;_reg.kiosks.push(kn);} return i; }
 function _si(sn){ let i=_reg.sellers.indexOf(sn); if(i<0){i=_reg.sellers.length;_reg.sellers.push(sn);} return i; }
 function _kn(i){ return _reg.kiosks[i]; }
 function _sn(i){ return _reg.sellers[i]; }
-
-// Wrappers called from HTML attrs using safe integer indices
-function _setKioskStd(ki,field,val){ setKioskStd(_kn(ki),field,val); }
-function _setKioskStdWeek(ki,monKey,val){ setKioskStdWeek(_kn(ki),monKey,val); }
+function _setKioskField(ki,field,val){ setKioskField(_kn(ki),field,val); }
+function _setKioskWeek(ki,monKey,val){ setKioskWeek(_kn(ki),monKey,val); }
 function _toggleSeller(ki,si){ toggleSeller(_kn(ki),_sn(si)); }
 function _setSellerOverride(si,field,key,val){ setSellerOverride(_sn(si),field,key,val); }
 
-function renderGoals(){
-  const ks=Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq);
+// ── Goals config rendering ─────────────────────────────────
+function renderGoals() {
+  const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
   initGoalsMonth();
-  const months=availableMonths();
-  const monthKey=goalsSelMonth;
-  const[yr,mo]=monthKey.split('-').map(Number);
-  const weeks=weeksInMonth(yr,mo);
+  const months   = availableMonths();
+  const monthKey = goalsSelMonth;
+  const [yr, mo] = monthKey.split('-').map(Number);
+  const weeks    = weeksInMonth(yr, mo);
 
-  let h=`<div class="goals-month-bar">`;
-  months.forEach(m=>h+=`<button class="goals-month-btn${m===monthKey?' on':''}" onclick="selectGoalsMonth('${m}')">${monthLabel(m)}</button>`);
-  h+=`</div>`;
+  // Month selector
+  let h = `<div class="goals-month-bar">`;
+  months.forEach(m => h += `<button class="goals-month-btn${m===monthKey?' on':''}" onclick="selectGoalsMonth('${m}')">${monthLabel(m)}</button>`);
+  h += `</div>`;
 
-  if(!ks.length){
-    h+=`<div class="empty"><div class="ei">○</div><div class="et">Importe um relatório primeiro</div></div>`;
-    document.getElementById('goalsBody').innerHTML=h;return;
+  if (!ks.length) {
+    h += `<div class="empty"><div class="ei">○</div><div class="et">Importe um relatório primeiro</div></div>`;
+    document.getElementById('goalsBody').innerHTML = h;
+    return;
   }
 
-  h+=`<div class="goals-grid">`;
+  h += `<div class="goals-grid">`;
 
-  // ── LEFT: Kiosk goal config ──
-  h+=`<div class="goals-card">
+  // ── LEFT: Kiosk config ──────────────────────────────────
+  h += `<div class="goals-card">
     <div class="goals-card-title">Quiosques</div>
-    <div class="goals-card-sub">${monthLabel(monthKey)} · padrão por vendedor</div>
-    <div class="goals-card-hint">
-      Configure a <strong>meta padrão por vendedor</strong> e os <strong>vendedores ativos</strong>.<br>
-      Meta do quiosque = padrão × n° ativos. Inativos ficam ocultos nos rankings.
-    </div>`;
+    <div class="goals-card-sub">${monthLabel(monthKey)} · meta total do quiosque</div>
+    <div class="goals-card-hint">Configure a <strong>meta total</strong> do quiosque. A meta individual é calculada automaticamente: <strong>total ÷ n° ativos</strong>.</div>`;
 
-  ks.forEach(k=>{
-    const kn=k.name;
-    const ki=_ki(kn);
-    const G=goals.kiosks[kn]||{};
-    const std=G.stdMonthly||'';
-    const active=G.activeSellers||[];
-    const allS=Object.values(k.sellers).sort((a,b)=>(b.liq||0)-(a.liq||0));
-    const nActive=active.length||allS.length;
-    const monthCalc=(G.stdMonthly||0)*nActive;
-    const wkCalc=w=>(G.stdWeekly?.[w.monKey]||0)*nActive;
+  ks.forEach(k => {
+    const kn  = k.name;
+    const ki  = _ki(kn);
+    const G   = goals.kiosks[kn] || {};
+    const active  = G.activeSellers || [];
+    const allS    = Object.values(k.sellers).sort((a,b) => (b.liq||0)-(a.liq||0));
+    const nActive = active.length || allS.length;
 
-    h+=`<div class="gk-block">
+    const mTotal = G.monthlyTotal || '';
+    const mInd   = (mTotal && nActive) ? parseFloat(mTotal)/nActive : 0;
+
+    h += `<div class="gk-block">
       <div class="gk-head">
         <div>
           <div class="gk-name">${sK(kn)}</div>
-          <div class="gk-sub" id="sub-k${ki}">${nActive} vend. ativos${monthCalc?` · meta mês ${R(monthCalc)}`:' · configure abaixo'}</div>
+          <div class="gk-sub" id="sub-k${ki}">${nActive} ativos${mInd?' · '+R(mInd)+'/vend.':''}</div>
         </div>
       </div>
+
       <div class="gk-std">
         <div class="gk-std-item">
-          <span class="gk-lbl">Padrão Mensal por Vendedor</span>
+          <span class="gk-lbl">Meta Mensal do Quiosque</span>
           <div class="gk-inp-row">
-            <input class="gk-inp" type="number" min="0" step="500"
-              value="${std}" placeholder="0"
-              oninput="_setKioskStd(${ki},'stdMonthly',this.value)">
-            <span class="gk-unit">/ vend.</span>
+            <input class="gk-inp" type="number" min="0" step="1000"
+              value="${mTotal}" placeholder="0"
+              oninput="_setKioskField(${ki},'monthlyTotal',this.value)">
           </div>
-          ${monthCalc?`<div style="font-size:.68rem;color:var(--muted);margin-top:3px" id="calc-k${ki}">Total: ${R(monthCalc)}</div>`:`<div style="font-size:.68rem;color:var(--muted);margin-top:3px" id="calc-k${ki}"></div>`}
+          <div class="gk-hint" id="calc-k${ki}">${mInd?'→ '+R(mInd)+' por vendedor':''}</div>
         </div>
       </div>
-      <div class="gk-sellers-lbl">Vendedores — ativo/inativo</div>
+
+      <div class="gk-sellers-lbl">Vendedores — ativo / inativo</div>
       <div class="seller-toggle-list" id="toggles-k${ki}">`;
 
-    allS.forEach(s=>{
-      const si=_si(s.name);
-      const isActive=active.length===0||active.includes(s.name);
-      h+=`<div class="seller-toggle${isActive?' active':''}" id="tog-k${ki}-s${si}" onclick="_toggleSeller(${ki},${si})">
+    allS.forEach(s => {
+      const si     = _si(s.name);
+      const isAct  = active.length===0 || active.includes(s.name);
+      h += `<div class="seller-toggle${isAct?' active':''}" id="tog-k${ki}-s${si}" onclick="_toggleSeller(${ki},${si})">
         <div>
           <div class="seller-toggle-name">${s.name}</div>
           <div class="seller-toggle-liq">${R(s.liq||0)}</div>
@@ -978,51 +1333,49 @@ function renderGoals(){
       </div>`;
     });
 
-    h+=`</div>
+    h += `</div>
       <div class="gk-weeks">
-        <div class="gk-week-lbl">Padrão Semanal por Vendedor</div>`;
+        <div class="gk-week-lbl">Metas Semanais do Quiosque</div>`;
 
-    weeks.forEach((w,wi)=>{
-      const wStd=G.stdWeekly?.[w.monKey]||'';
-      const wCalc=wkCalc(w);
-      // monKey is always YYYY-MM-DD (safe in attrs, no special chars)
-      h+=`<div class="gk-week-row">
+    weeks.forEach((w, wi) => {
+      const wTotal = G.weeklyOverride?.[w.monKey] || '';
+      const wInd   = (wTotal && nActive) ? parseFloat(wTotal)/nActive : 0;
+      h += `<div class="gk-week-row">
         <span class="gk-week-label">S${wi+1} <span style="color:var(--muted)">${w.label}${w.crossMonth?' ↗':''}</span></span>
         <div class="gk-week-right">
-          <span class="gk-week-calc" id="wcalc-k${ki}-${w.monKey}">${wCalc?'= '+R(wCalc):''}</span>
-          <input class="gk-inp" type="number" min="0" step="200" style="width:90px"
-            value="${wStd}" placeholder="0"
-            oninput="_setKioskStdWeek(${ki},'${w.monKey}',this.value)">
-          <span class="gk-unit">/ vend.</span>
+          <span class="gk-week-calc" id="wcalc-k${ki}-${w.monKey}">${wInd?'→ '+R(wInd)+'/vend.':''}</span>
+          <input class="gk-inp" type="number" min="0" step="500" style="width:110px"
+            value="${wTotal}" placeholder="0"
+            oninput="_setKioskWeek(${ki},'${w.monKey}',this.value)">
         </div>
       </div>`;
     });
 
-    h+=`</div></div>`;  // gk-weeks + gk-block
+    h += `</div></div>`;  // gk-weeks + gk-block
   });
-  h+=`</div>`;  // goals-card
+  h += `</div>`;  // left goals-card
 
-  // ── RIGHT: Individual seller overrides ──
-  h+=`<div class="goals-card">
+  // ── RIGHT: Seller overrides (optional, falls back to kiosk÷n) ──
+  h += `<div class="goals-card">
     <div class="goals-card-title">Ajustes Individuais</div>
-    <div class="goals-card-sub">${monthLabel(monthKey)} · sobrescreve o padrão do quiosque</div>
-    <div class="goals-card-hint">Opcional. Deixe em branco para usar o padrão do quiosque.</div>`;
+    <div class="goals-card-sub">${monthLabel(monthKey)} · sobrescreve o padrão</div>
+    <div class="goals-card-hint">Opcional. Se vazio, usa a meta do quiosque ÷ n° ativos.</div>`;
 
-  ks.forEach(k=>{
-    const active=goals.kiosks[k.name]?.activeSellers||[];
-    const allS=Object.values(k.sellers).sort((a,b)=>(b.liq||0)-(a.liq||0));
-    const visibleSellers=active.length>0?allS.filter(s=>active.includes(s.name)):allS;
-    if(!visibleSellers.length)return;
+  ks.forEach(k => {
+    const active  = goals.kiosks[k.name]?.activeSellers || [];
+    const allS    = Object.values(k.sellers).sort((a,b) => (b.liq||0)-(a.liq||0));
+    const visible = active.length > 0 ? allS.filter(s => active.includes(s.name)) : allS;
+    if (!visible.length) return;
 
-    h+=`<div class="goal-kiosk-section">
-      <div style="font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">${sK(k.name)}</div>`;
+    h += `<div class="goal-kiosk-section">
+      <div class="gk-kiosk-lbl">${sK(k.name)}</div>`;
 
-    visibleSellers.forEach(s=>{
-      const si=_si(s.name);
-      const ov=goals.sellers[s.name]||{};
-      const ovM=ov.overrideMonthly?.[monthKey]||'';
+    visible.forEach(s => {
+      const si  = _si(s.name);
+      const ov  = goals.sellers[s.name] || {};
+      const ovM = ov.overrideMonthly?.[monthKey] || '';
 
-      h+=`<div class="gk-override-row">
+      h += `<div class="gk-override-row">
         <span class="gk-override-name">${s.name}</span>
         <div style="display:flex;flex-direction:column;gap:2px">
           <span class="gk-lbl">Mensal</span>
@@ -1033,123 +1386,140 @@ function renderGoals(){
       </div>
       <div style="margin-bottom:10px">`;
 
-      weeks.forEach((w,wi)=>{
-        const ovW=ov.overrideWeekly?.[w.monKey]||'';
-        h+=`<div class="gk-week-row" style="padding:3px 0">
+      weeks.forEach((w, wi) => {
+        const ovW = ov.overrideWeekly?.[w.monKey] || '';
+        h += `<div class="gk-week-row" style="padding:3px 0">
           <span class="gk-week-label" style="font-size:.75rem">S${wi+1} <span style="color:var(--muted)">${w.label}</span></span>
-          <input class="gk-inp" type="number" min="0" step="200" style="width:90px"
+          <input class="gk-inp" type="number" min="0" step="200" style="width:100px"
             value="${ovW}" placeholder="padrão"
             oninput="_setSellerOverride(${si},'overrideWeekly','${w.monKey}',this.value)">
         </div>`;
       });
-
-      h+=`</div>`;
+      h += `</div>`;
     });
-    h+=`</div>`;
+    h += `</div>`;
   });
-  h+=`</div></div>`;  // goals-card + goals-grid
+  h += `</div></div>`;  // right card + grid
 
-  h+=`<div class="goals-actions">
+  h += `<div class="goals-actions">
     <button class="btn-primary" onclick="saveAllGoals()">Salvar metas</button>
     <button class="btn-secondary" onclick="clearMonthGoals()">Limpar mês</button>
-    <span class="save-notice" id="saveNotice">✓ Salvo no Firebase</span>
+    <span class="save-notice" id="saveNotice">✓ Salvo</span>
   </div>`;
 
-  document.getElementById('goalsBody').innerHTML=h;
+  document.getElementById('goalsBody').innerHTML = h;
 }
 
-// ── Goals setters ──────────────────────────────────────────
-function ensureKiosk(kn){
-  if(!goals.kiosks[kn])goals.kiosks[kn]={stdMonthly:0,stdWeekly:{},activeSellers:[]};
-  if(!goals.kiosks[kn].stdWeekly)goals.kiosks[kn].stdWeekly={};
-  if(!goals.kiosks[kn].activeSellers)goals.kiosks[kn].activeSellers=[];
+// ── Goals setters ─────────────────────────────────────────
+function ensureKiosk(kn) {
+  if (!goals.kiosks[kn]) goals.kiosks[kn] = { monthlyTotal:0, weeklyOverride:{}, activeSellers:[] };
+  const G = goals.kiosks[kn];
+  if (G.monthlyTotal   === undefined) G.monthlyTotal   = 0;
+  if (!G.weeklyOverride)              G.weeklyOverride  = {};
+  if (!G.activeSellers)               G.activeSellers   = [];
 }
-function ensureSeller(sn){
-  if(!goals.sellers[sn])goals.sellers[sn]={overrideMonthly:{},overrideWeekly:{}};
-  if(!goals.sellers[sn].overrideMonthly)goals.sellers[sn].overrideMonthly={};
-  if(!goals.sellers[sn].overrideWeekly)goals.sellers[sn].overrideWeekly={};
+function ensureSeller(sn) {
+  if (!goals.sellers[sn]) goals.sellers[sn] = { overrideMonthly:{}, overrideWeekly:{} };
+  if (!goals.sellers[sn].overrideMonthly) goals.sellers[sn].overrideMonthly = {};
+  if (!goals.sellers[sn].overrideWeekly)  goals.sellers[sn].overrideWeekly  = {};
 }
 
-function setKioskStd(kn,field,val){
+function setKioskField(kn, field, val) {
   ensureKiosk(kn);
-  goals.kiosks[kn][field]=parseFloat(val)||0;
-  // Live update derived labels
-  const ki=_ki(kn);
-  const nActive=goals.kiosks[kn].activeSellers.length||Object.keys(store.kiosks[kn]?.sellers||{}).length;
-  const calc=(goals.kiosks[kn].stdMonthly||0)*nActive;
-  const sub=document.getElementById(`sub-k${ki}`);
-  if(sub)sub.textContent=`${nActive} vend. ativos${calc?' · meta mês '+R(calc):' · configure abaixo'}`;
-  const calcEl=document.getElementById(`calc-k${ki}`);
-  if(calcEl)calcEl.textContent=calc?'Total: '+R(calc):'';
+  goals.kiosks[kn][field] = parseFloat(val) || 0;
+  _refreshKioskLabels(kn);
 }
 
-function setKioskStdWeek(kn,monKey,val){
+function setKioskWeek(kn, monKey, val) {
   ensureKiosk(kn);
-  goals.kiosks[kn].stdWeekly[monKey]=parseFloat(val)||0;
-  // Live update week calc label
-  const ki=_ki(kn);
-  const nActive=goals.kiosks[kn].activeSellers.length||Object.keys(store.kiosks[kn]?.sellers||{}).length;
-  const calc=(goals.kiosks[kn].stdWeekly[monKey]||0)*nActive;
-  const el=document.getElementById(`wcalc-k${ki}-${monKey}`);
-  if(el)el.textContent=calc?'= '+R(calc):'';
+  const v = parseFloat(val) || 0;
+  if (v) goals.kiosks[kn].weeklyOverride[monKey] = v;
+  else   delete goals.kiosks[kn].weeklyOverride[monKey];
+  _refreshKioskWeekLabel(kn, monKey);
 }
 
-function toggleSeller(kn,sName){
+function _refreshKioskLabels(kn) {
+  const ki = _ki(kn);
+  const G  = goals.kiosks[kn];
+  const nActive = G.activeSellers.length || Object.keys(store.kiosks[kn]?.sellers||{}).length;
+  const mInd = nActive && G.monthlyTotal ? G.monthlyTotal/nActive : 0;
+  const sub  = document.getElementById(`sub-k${ki}`);
+  if (sub)  sub.textContent = `${nActive} ativos${mInd?' · '+R(mInd)+'/vend.':''}`;
+  const calc = document.getElementById(`calc-k${ki}`);
+  if (calc) calc.textContent = mInd ? '→ '+R(mInd)+' por vendedor' : '';
+  // Refresh all week labels too (n changed)
+  if (goalsSelMonth) {
+    const [yr,mo] = goalsSelMonth.split('-').map(Number);
+    weeksInMonth(yr,mo).forEach(w => _refreshKioskWeekLabel(kn, w.monKey));
+  }
+}
+
+function _refreshKioskWeekLabel(kn, monKey) {
+  const ki = _ki(kn);
+  const G  = goals.kiosks[kn];
+  const nActive = G.activeSellers.length || Object.keys(store.kiosks[kn]?.sellers||{}).length;
+  const wTotal  = G.weeklyOverride?.[monKey] || 0;
+  const wInd    = nActive && wTotal ? wTotal/nActive : 0;
+  const el = document.getElementById(`wcalc-k${ki}-${monKey}`);
+  if (el) el.textContent = wInd ? '→ '+R(wInd)+'/vend.' : '';
+}
+
+function toggleSeller(kn, sName) {
   ensureKiosk(kn);
-  const K=store.kiosks[kn];
-  const allSellers=Object.keys(K?.sellers||{});
-  let active=goals.kiosks[kn].activeSellers;
-  // If empty (none configured yet) = all active; init with all
-  if(active.length===0)goals.kiosks[kn].activeSellers=active=[...allSellers];
-  const idx=active.indexOf(sName);
-  if(idx>=0)active.splice(idx,1);
-  else active.push(sName);
-
-  // Update toggle UI using IDs
-  const ki=_ki(kn);
-  const si=_si(sName);
-  const tog=document.getElementById(`tog-k${ki}-s${si}`);
-  if(tog)tog.classList.toggle('active',active.includes(sName));
-
-  // Update count label
-  const nActive=active.length;
-  const calc=(goals.kiosks[kn].stdMonthly||0)*nActive;
-  const sub=document.getElementById(`sub-k${ki}`);
-  if(sub)sub.textContent=`${nActive} vend. ativos${calc?' · meta mês '+R(calc):' · configure abaixo'}`;
-  const calcEl=document.getElementById(`calc-k${ki}`);
-  if(calcEl)calcEl.textContent=calc?'Total: '+R(calc):'';
+  const allSellers = Object.keys(store.kiosks[kn]?.sellers || {});
+  let active = goals.kiosks[kn].activeSellers;
+  if (active.length === 0) goals.kiosks[kn].activeSellers = active = [...allSellers];
+  const idx = active.indexOf(sName);
+  if (idx >= 0) active.splice(idx, 1); else active.push(sName);
+  // Update toggle UI
+  const ki = _ki(kn), si = _si(sName);
+  const tog = document.getElementById(`tog-k${ki}-s${si}`);
+  if (tog) tog.classList.toggle('active', active.includes(sName));
+  _refreshKioskLabels(kn);
 }
 
-function setSellerOverride(sn,field,key,val){
+function setSellerOverride(sn, field, key, val) {
   ensureSeller(sn);
-  goals.sellers[sn][field][key]=parseFloat(val)||0;
+  goals.sellers[sn][field][key] = parseFloat(val) || 0;
 }
 
-async function saveAllGoals(){
-  showStatus('Salvando…','dim');
-  try{
+async function saveAllGoals() {
+  showStatus('Salvando…', 'dim');
+  try {
     await window.fbSaveGoals(JSON.parse(JSON.stringify(goals)));
-    renderGeral();renderKiosques();
-    const n=document.getElementById('saveNotice');
-    if(n){n.classList.add('show');setTimeout(()=>n.classList.remove('show'),2500);}
+    renderGeral(); renderKiosques();
+    const n = document.getElementById('saveNotice');
+    if (n) { n.classList.add('show'); setTimeout(() => n.classList.remove('show'), 2500); }
     hideStatus();
-  }catch(e){showStatus('Erro: '+e.message,'err');}
+  } catch(e) { showStatus('Erro: '+e.message, 'err'); }
 }
 
-function clearMonthGoals(){
-  if(!confirm(`Limpar todas as metas de ${monthLabel(goalsSelMonth)}?`))return;
-  const mk=goalsSelMonth;
-  const[yr,mo]=mk.split('-').map(Number);
-  const wKeys=weeksInMonth(yr,mo).map(w=>w.monKey);
-  Object.values(goals.kiosks).forEach(G=>{
-    if(G.stdWeekly)wKeys.forEach(k=>delete G.stdWeekly[k]);
+function clearMonthGoals() {
+  if (!confirm(`Limpar todas as metas de ${monthLabel(goalsSelMonth)}?`)) return;
+  const mk = goalsSelMonth;
+  const [yr, mo] = mk.split('-').map(Number);
+  const wKeys = weeksInMonth(yr, mo).map(w => w.monKey);
+  Object.values(goals.kiosks).forEach(G => {
+    if (G.weeklyOverride) wKeys.forEach(k => delete G.weeklyOverride[k]);
+    if (mk === goalsSelMonth) G.monthlyTotal = 0;
   });
-  Object.values(goals.sellers).forEach(S=>{
-    if(S.overrideMonthly)delete S.overrideMonthly[mk];
-    if(S.overrideWeekly)wKeys.forEach(k=>delete S.overrideWeekly[k]);
+  Object.values(goals.sellers).forEach(S => {
+    if (S.overrideMonthly) delete S.overrideMonthly[mk];
+    if (S.overrideWeekly)  wKeys.forEach(k => delete S.overrideWeekly[k]);
   });
-  saveAllGoals().then(()=>renderGoals());
+  saveAllGoals().then(() => renderGoals());
 }
+
+</script>ete G.weeklyOverride[k]);
+    if (mk === goalsSelMonth) G.monthlyTotal = 0;
+  });
+  Object.values(goals.sellers).forEach(S => {
+    if (S.overrideMonthly) delete S.overrideMonthly[mk];
+    if (S.overrideWeekly)  wKeys.forEach(k => delete S.overrideWeekly[k]);
+  });
+  saveAllGoals().then(() => renderGoals());
+}
+
 </script>
 </body>
 </html>
