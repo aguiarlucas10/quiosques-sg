@@ -1111,6 +1111,9 @@ function toggleGeralWeeks(kName) {
 // ══════════════════════════════════════════════════════════
 //  RENDER GERAL
 // ══════════════════════════════════════════════════════════
+// ── Painel Geral — estado do período selecionado ──
+let geralPeriod = null;  // YYYY-MM, default = último mês com dados
+
 function renderGeral() {
   const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
   if (!ks.length) { showEmptyState(); return; }
