@@ -822,6 +822,8 @@ const CLRS=['rgba(255,255,255,.90)','rgba(255,255,255,.65)','rgba(255,255,255,.4
 let chartInstances={};
 function destroyChart(id){if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}}
 
+// Floor to 1 decimal place (always rounds down)
+const floorPct = p => (Math.floor(p * 10) / 10).toFixed(1);
 function gColor(pct){
   if(pct===0)return'var(--border)';
   if(pct>=100)return'var(--success)';
@@ -832,7 +834,7 @@ function gBadge(actual,goal){
   if(!goal)return'';
   const p=(actual/goal)*100;
   const cls=p>=100?'hit':p>=70?'warn':'miss';
-  return`<span class="gbadge ${cls}">${p.toFixed(0)}%</span>`;
+  return`<span class="gbadge ${cls}">${floorPct(p)}%</span>`;
 }
 function gBar(actual,goal,opts=''){
   if(!goal)return`<span style="font-size:.72rem;color:var(--muted)">—</span>`;
@@ -971,7 +973,7 @@ function prizeBadge(actual,goal){
   if(!goal||actual<=0)return'';
   const pct=(actual/goal)*100;
   const tier=prizeForPct(pct);
-  if(!tier)return`<span class="gbadge miss">${pct.toFixed(0)}%</span>`;
+  if(!tier)return`<span class="gbadge miss">${floorPct(pct)}%</span>`;
   const cls=tier.label==='Ultra'?'ultra':tier.label==='Mega'?'mega':tier.label==='Super'?'super':'hit';
   return`<span class="gbadge ${cls}">${tier.label} · R$${tier.prize}</span>`;
 }
@@ -1317,6 +1319,7 @@ function renderGeral() {
   if (!isMonth) {
     wctxSel = allWeeks.find(w => w.monKey === geralWeek);
   }
+  const periodLabel = isMonth ? monthLabel(selMonth) : (wctxSel?.label||'');
 
   // ── Toolbar: month + week dropdowns ──────────────────
   let h = `<div class="geral-toolbar">
@@ -1340,38 +1343,6 @@ function renderGeral() {
     h += `</select></div>`;
   }
   h += `</div>`;  // geral-filters
-
-  // KPI strip — shows monthly or weekly totals
-  let totLiq = 0, totGoal = 0, totPecas = 0;
-  ks.forEach(k => {
-    if (isMonth) {
-      totLiq  += k.liq;
-      totGoal += kioskMonthGoal(k.name, selMonth);
-      totPecas+= k.pecas;
-    } else {
-      totLiq  += kWeekLiq(k.name, wctxSel.monday, wctxSel.sunday);
-      totGoal += kioskWeekGoal(k.name, geralWeek);
-      totPecas+= ks.reduce((s,kk)=>s, 0);  // placeholder
-    }
-  });
-  if (!isMonth) {
-    // recalc pieces for week
-    totPecas = ks.reduce((s,k) => {
-      let p=0;
-      for (const [d,v] of Object.entries(k.byDate||{})) {
-        const dt=new Date(d+'T00:00:00');
-        if(dt>=wctxSel.monday&&dt<=wctxSel.sunday) p+=v.pecas||0;
-      }
-      return s+p;
-    }, 0);
-  }
-  const totPct = totGoal>0 ? (totLiq/totGoal)*100 : 0;
-  const periodLabel = isMonth ? monthLabel(selMonth) : wctxSel?.label||'';
-  h += `<div class="geral-kpis">
-    <div class="geral-kpi"><div class="geral-kpi-l">Faturamento Líquido</div><div class="geral-kpi-v">${R(totLiq)}</div><div class="geral-kpi-sub">${periodLabel}</div></div>
-    <div class="geral-kpi"><div class="geral-kpi-l">Meta</div><div class="geral-kpi-v">${totGoal?R(totGoal):'—'}</div>${totGoal?`<div class="geral-kpi-pct" style="color:${gColor(totPct)}">${totPct.toFixed(0)}%</div>`:''}</div>
-    <div class="geral-kpi"><div class="geral-kpi-l">Peças</div><div class="geral-kpi-v">${totPecas.toLocaleString('pt-BR')}</div></div>
-  </div></div>`;
 
   // ── Kiosk cards ──────────────────────────────────────
   h += `<div class="geral-grid">`;
@@ -1404,7 +1375,7 @@ function renderGeral() {
         </div>
         <div class="gc-liq">
           <div class="gc-liq-v">${R(kLiq)}</div>
-          ${kGoal ? `<div class="gc-liq-goal" style="color:${gColor(kPct)}">${kPct.toFixed(0)}% de ${R(kGoal)}</div>` : ''}
+          ${kGoal ? `<div class="gc-liq-goal" style="color:${gColor(kPct)}">${floorPct(kPct)}% de ${R(kGoal)}</div>` : ''}
         </div>
       </div>`;
 
@@ -1439,7 +1410,7 @@ function renderGeral() {
         <span class="gc-seller-pcs num">${pcs}</span>
         <span class="gc-seller-goal">
           ${sGoal
-            ? `<span class="gc-goal-pct" style="color:${gColor(sPct)}">${sPct.toFixed(0)}%</span>
+            ? `<span class="gc-goal-pct" style="color:${gColor(sPct)}">${floorPct(sPct)}%</span>
                <div class="gc-mini-bar"><div class="gc-mini-fill" style="width:${Math.min(sPct,100)}%;background:${gColor(sPct)}"></div></div>`
             : '<span class="no-goal">—</span>'}
         </span>
@@ -1464,7 +1435,7 @@ function renderGeral() {
           <div class="gc-week-head">
             <span class="gc-week-lbl">S${wi+1} <span style="color:var(--muted)">${w.label}${w.crossMonth?' ↗':''}</span></span>
             <span class="gc-week-liq mo">${R(wLiq)}</span>
-            <span class="gc-week-pct" style="color:${gw?gColor(pctW):'var(--muted)'}">${gw?pctW.toFixed(0)+'%':'—'}</span>
+            <span class="gc-week-pct" style="color:${gw?gColor(pctW):'var(--muted)'}">${gw?floorPct(pctW)+'%':'—'}</span>
           </div>
           ${gw?`<div class="gc-mini-bar" style="margin:3px 0 8px"><div class="gc-mini-fill" style="width:${Math.min(pctW,100)}%;background:${gColor(pctW)}"></div></div>`:''}
           <div class="gc-week-sellers">`;
@@ -1481,7 +1452,7 @@ function renderGeral() {
             <span class="gc-seller-pcs num">${swP}</span>
             <span class="gc-seller-goal">
               ${sgw
-                ? `<span class="gc-goal-pct" style="color:${gColor(spW)}">${spW.toFixed(0)}%</span>`
+                ? `<span class="gc-goal-pct" style="color:${gColor(spW)}">${floorPct(spW)}%</span>`
                 : '<span class="no-goal">—</span>'}
             </span>
           </div>`;
@@ -1579,79 +1550,150 @@ function renderConsolidado() {
       '<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado</div></div>';
     return;
   }
-  const tot  = store.gtLiq  || ks.reduce((s,k) => s+k.liq, 0);
-  const totP = store.gtPecas || ks.reduce((s,k) => s+k.pecas, 0);
-  const totS = Object.keys(store.sellers).length;
-  const tk   = totP > 0 ? tot/totP : 0;
-  const wctx = getWeekCtx();
-  const wKey = wctx?.monKey || '';
 
-  let h = `<div class="kpi-g">
-    <div class="kpi"><div class="kpi-l">Faturamento Líquido Total</div><div class="kpi-v">${R(tot)}</div><div class="kpi-m">${store.period||'—'}</div></div>
-    <div class="kpi"><div class="kpi-l">Ticket Médio</div><div class="kpi-v">${R(tk)}</div><div class="kpi-m">${totP.toLocaleString('pt-BR')} peças</div></div>
+  const months = availableMonths();
+  if (!geralPeriod) {
+    const dm = (store.dateRange||[]).map(d=>d.slice(0,7)).sort();
+    geralPeriod = dm[dm.length-1] || months[months.length-1] || months[0];
+  }
+  const selMonth = geralPeriod;
+  const allWeeks = buildWeeksForMonth(selMonth);
+  if (geralWeek && !allWeeks.find(w => w.monKey === geralWeek)) geralWeek = null;
+  const isMonth  = !geralWeek;
+  const wctxSel  = isMonth ? null : allWeeks.find(w => w.monKey === geralWeek);
+  const periodLabel = isMonth ? monthLabel(selMonth) : (wctxSel?.label||'');
+
+  // ── Shared filter toolbar (mirrors Painel Geral) ──────
+  let h = `<div class="geral-toolbar">
+    <div class="geral-filters">
+      <div class="geral-filter-item">
+        <label class="geral-month-lbl">Mês</label>
+        <select class="geral-month-sel" onchange="setConsolidadoPeriod(this.value)">`;
+  months.forEach(m => {
+    h += `<option value="${m}"${m===selMonth?' selected':''}>${monthLabel(m)}</option>`;
+  });
+  h += `</select></div>`;
+  if (allWeeks.length) {
+    h += `<div class="geral-filter-item">
+      <label class="geral-month-lbl">Semana</label>
+      <select class="geral-month-sel" onchange="setConsolidadoWeek(this.value)">
+        <option value=""${!geralWeek?' selected':''}>Mês completo</option>`;
+    allWeeks.forEach((w, wi) => {
+      h += `<option value="${w.monKey}"${geralWeek===w.monKey?' selected':''}>S${wi+1} · ${w.label}${w.crossMonth?' ↗':''}</option>`;
+    });
+    h += `</select></div>`;
+  }
+  h += `</div></div>`;
+
+  // ── KPI strip ──────────────────────────────────────────
+  let totLiq = 0, totPecas = 0, totGoal = 0;
+  ks.forEach(k => {
+    if (isMonth) {
+      totLiq   += k.liq;
+      totPecas += k.pecas;
+      totGoal  += kioskMonthGoal(k.name, selMonth);
+    } else {
+      totLiq   += kWeekLiq(k.name, wctxSel.monday, wctxSel.sunday);
+      totGoal  += kioskWeekGoal(k.name, geralWeek);
+    }
+  });
+  if (!isMonth) {
+    totPecas = ks.reduce((s,k) => {
+      let p=0;
+      for (const [d,v] of Object.entries(k.byDate||{})) {
+        const dt=new Date(d+'T00:00:00');
+        if(dt>=wctxSel.monday&&dt<=wctxSel.sunday) p+=v.pecas||0;
+      }
+      return s+p;
+    }, 0);
+  }
+  const totPct = totGoal>0 ? (totLiq/totGoal)*100 : 0;
+  const totS   = Object.keys(store.sellers).length;
+  const tk     = totPecas>0 ? totLiq/totPecas : 0;
+
+  h += `<div class="kpi-g">
+    <div class="kpi"><div class="kpi-l">Faturamento Líquido</div><div class="kpi-v">${R(totLiq)}</div><div class="kpi-m">${periodLabel}</div></div>
+    <div class="kpi"><div class="kpi-l">Meta</div><div class="kpi-v">${totGoal?R(totGoal):'—'}</div><div class="kpi-m" style="color:${totGoal?gColor(totPct):'var(--muted)'}">${totGoal?floorPct(totPct)+'%':'—'}</div></div>
+    <div class="kpi"><div class="kpi-l">Ticket Médio</div><div class="kpi-v">${R(tk)}</div><div class="kpi-m">${totPecas.toLocaleString('pt-BR')} peças</div></div>
     <div class="kpi"><div class="kpi-l">Vendedores</div><div class="kpi-v">${totS}</div><div class="kpi-m">${ks.length} quiosques</div></div>
-    <div class="kpi"><div class="kpi-l">Semana atual</div><div class="kpi-v" style="font-size:1rem">${wctx?wctx.label:'—'}</div><div class="kpi-m">Seg → Dom</div></div>
-  </div>
-  <div class="cr">
-    <div class="card"><div class="ct">Faturamento Líquido por Quiosque</div><div class="cs">${store.period||'—'}</div><canvas id="cBar" height="160"></canvas></div>
+  </div>`;
+
+  // ── Charts (month totals only) ─────────────────────────
+  h += `<div class="cr">
+    <div class="card"><div class="ct">Faturamento Líquido por Quiosque</div><div class="cs">${periodLabel}</div><canvas id="cBar" height="160"></canvas></div>
     <div class="card"><div class="ct">Participação</div><div class="cs">% do total líquido</div><canvas id="cPie" height="160"></canvas></div>
   </div>`;
 
-  // Quiosques table (com faturamento)
+  // ── Quiosques table ────────────────────────────────────
   h += `<div class="h2">Quiosques</div><div class="tw tw-scroll"><table><thead><tr>
     <th>Quiosque</th><th class="num">Faturamento Líquido</th><th class="num">Peças</th><th class="num">Ticket</th>
-    <th>Meta Mensal</th>${wctx?'<th>Meta Semanal</th>':''}
+    <th>${isMonth?'Meta Mensal':'Meta Semanal'}</th>
   </tr></thead><tbody>`;
   ks.forEach(k => {
-    const sc  = Object.keys(k.sellers).length;
-    const ktk = k.pecas > 0 ? k.liq/k.pecas : 0;
-    const gm  = kioskMonthGoal(k.name, wctx?.monthKey||'');
-    const gw  = kioskWeekGoal(k.name, wKey);
-    const wLiq = wctx ? kWeekLiq(k.name,wctx.monday,wctx.sunday) : 0;
+    const sc   = Object.keys(k.sellers).length;
+    let kLiq, kPcs, kGoal, kTk;
+    if (isMonth) {
+      kLiq = k.liq; kPcs = k.pecas;
+      kGoal = kioskMonthGoal(k.name, selMonth);
+    } else {
+      kLiq = kWeekLiq(k.name, wctxSel.monday, wctxSel.sunday);
+      kPcs = 0;
+      for (const [d,v] of Object.entries(k.byDate||{})) {
+        const dt=new Date(d+'T00:00:00');
+        if(dt>=wctxSel.monday&&dt<=wctxSel.sunday) kPcs+=v.pecas||0;
+      }
+      kGoal = kioskWeekGoal(k.name, geralWeek);
+    }
+    kTk = kPcs>0 ? kLiq/kPcs : 0;
     h += `<tr>
       <td><strong>${sK(k.name)}</strong><br><span style="font-size:.7rem;color:var(--muted)">${sc} vend.</span></td>
-      <td class="mo num">${R(k.liq)}</td><td class="num">${k.pecas.toLocaleString('pt-BR')}</td>
-      <td class="mo num">${ktk>0?R(ktk):'—'}</td>
-      <td>${gBar(k.liq,gm)}</td>
-      ${wctx?`<td>${gBarWithAccum(wLiq,gw,wLiq)}</td>`:''}
+      <td class="mo num">${R(kLiq)}</td><td class="num">${kPcs.toLocaleString('pt-BR')}</td>
+      <td class="mo num">${kTk>0?R(kTk):'—'}</td>
+      <td>${gBar(kLiq, kGoal)}</td>
     </tr>`;
   });
   h += `</tbody></table></div>`;
 
-  // Vendedores table (com faturamento)
+  // ── Vendedores table ───────────────────────────────────
   const allS = Object.values(store.sellers).sort((a,b) => b.liq - a.liq);
   h += `<div class="h2">Vendedores</div><div class="tw tw-scroll"><table><thead><tr>
     <th>#</th><th>Vendedor</th><th>Quiosque</th>
     <th class="num">Faturamento Líquido</th><th class="num">Peças</th><th class="num">Dias</th><th class="num">Ticket</th>
-    <th>Meta Mensal</th>${wctx?'<th>Meta Semanal · Premiação</th>':''}
+    <th>${isMonth?'Meta Mensal':'Meta Semanal'} · Premiação</th>
   </tr></thead><tbody>`;
   let rank = 0;
   allS.forEach(s => {
     const kName = s.kiosk||'';
     const cfg   = goals.kiosks[kName]?.activeSellers?.length > 0;
     const isAct = !cfg || activeSellers(kName).includes(s.name);
+    let sLiq, sPcs, sGoal;
+    if (isMonth) {
+      sLiq = s.liq||0; sPcs = s.pecas||0;
+      sGoal = sellerMonthGoal(kName, selMonth);
+    } else {
+      sLiq  = sWeekLiq(kName, s.name, wctxSel.monday, wctxSel.sunday);
+      sPcs  = sWeekPcs(kName, s.name, wctxSel.monday, wctxSel.sunday);
+      sGoal = sellerWeekGoal(kName, geralWeek);
+    }
+    const tk2 = sPcs>0 ? sLiq/sPcs : 0;
     if (cfg && !isAct) {
-      const tk2 = (s.pecas||0)>0?(s.liq||0)/s.pecas:0;
       h += `<tr class="inactive"><td class="rank-num">—</td><td>${s.name}<span class="tag-inactive">inativo</span></td>
         <td style="font-size:.8rem;color:var(--muted)">${sK(kName)}</td>
-        <td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td>
+        <td class="mo num">${R(sLiq)}</td><td class="num">${sPcs}</td>
         <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
-        <td>—</td>${wctx?'<td>—</td>':''}
+        <td>—</td>
       </tr>`;
       return;
     }
     rank++;
-    const tk2 = (s.pecas||0)>0?(s.liq||0)/s.pecas:0;
-    const gm  = sellerMonthGoal(kName, wctx?.monthKey||'');
-    const gw  = sellerWeekGoal(kName, wKey);
-    const wLiq = wctx ? sWeekLiq(kName,s.name,wctx.monday,wctx.sunday) : 0;
+    const prize = isMonth ? prizeForPctMonthly(sGoal>0?(sLiq/sGoal)*100:0)
+                          : prizeForPct(sGoal>0?(sLiq/sGoal)*100:0);
     h += `<tr>
       <td class="rank-num">${rank}</td><td><strong>${s.name}</strong></td>
       <td style="color:var(--muted);font-size:.8rem">${sK(kName)}</td>
-      <td class="mo num">${R(s.liq||0)}</td><td class="num">${s.pecas||0}</td>
+      <td class="mo num">${R(sLiq)}</td><td class="num">${sPcs}</td>
       <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
-      <td>${gBar(s.liq||0,gm)}</td>
-      ${wctx?`<td>${prizeBadge(wLiq,gw)+gBarWithAccum(wLiq,gw,wLiq)}</td>`:''}
+      <td>${gBar(sLiq,sGoal)}${prize?`<span class="gbadge ${prize.label.toLowerCase()}" style="margin-left:4px">${prize.label} +R$${prize.prize}</span>`:''}</td>
     </tr>`;
   });
   h += `</tbody></table></div>`;
@@ -1661,20 +1703,24 @@ function renderConsolidado() {
   destroyChart('cBar'); destroyChart('cPie');
 
   setTimeout(() => {
-    const labels = ks.map(k => sK(k.name));
+    const labels  = ks.map(k => sK(k.name));
+    const barData = ks.map(k => isMonth ? k.liq : kWeekLiq(k.name, wctxSel?.monday, wctxSel?.sunday));
     chartInstances['cBar'] = new Chart(document.getElementById('cBar'), {
-      type:'bar', data:{labels,datasets:[{data:ks.map(k=>k.liq),backgroundColor:CLRS,borderRadius:4,borderSkipped:false}]},
+      type:'bar', data:{labels,datasets:[{data:barData,backgroundColor:CLRS,borderRadius:4,borderSkipped:false}]},
       options:{responsive:true,plugins:{legend:{display:false}},scales:{
         x:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:10}}},
         y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:10},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
       }}
     });
     chartInstances['cPie'] = new Chart(document.getElementById('cPie'), {
-      type:'doughnut', data:{labels,datasets:[{data:ks.map(k=>k.liq),backgroundColor:CLRS,borderColor:'#000',borderWidth:2}]},
+      type:'doughnut', data:{labels,datasets:[{data:barData,backgroundColor:CLRS,borderColor:'#000',borderWidth:2}]},
       options:{responsive:true,cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:'#666',font:{family:'DM Mono',size:10},padding:14}}}}
     });
   }, 80);
 }
+
+function setConsolidadoPeriod(val) { geralPeriod = val; geralWeek = null; renderConsolidado(); }
+function setConsolidadoWeek(val)   { geralWeek = val || null; renderConsolidado(); }
 
 // ══════════════════════════════════════════════════════════
 //  RENDER QUIOSQUES (responsivo, sem overflow)
@@ -1720,7 +1766,7 @@ function renderKiosques() {
           <div class="ks-goal-lbl">Meta Mensal <span class="ks-goal-n">${nActive} vend.</span></div>
           <div class="ks-goal-row">
             <span class="ks-goal-val">${R(k.liq)}</span>
-            <span class="ks-goal-pct" style="color:${gColor(pM)}">${pM.toFixed(0)}%</span>
+            <span class="ks-goal-pct" style="color:${gColor(pM)}">${floorPct(pM)}%</span>
           </div>
           <div class="ks-goal-sub">de ${R(gm)}</div>
           <div class="ks-goal-bar"><div class="ks-goal-fill" style="width:${pM}%;background:${gColor(pM)}"></div></div>
@@ -1731,7 +1777,7 @@ function renderKiosques() {
           <div class="ks-goal-lbl">Semana · ${wctx.label} <span class="ks-goal-n">${nActive} vend.</span></div>
           <div class="ks-goal-row">
             <span class="ks-goal-val">${R(wLiq)}</span>
-            <span class="ks-goal-pct" style="color:${gColor(pW)}">${pW.toFixed(0)}%</span>
+            <span class="ks-goal-pct" style="color:${gColor(pW)}">${floorPct(pW)}%</span>
           </div>
           <div class="ks-goal-sub">de ${R(gw)}</div>
           <div class="ks-goal-bar"><div class="ks-goal-fill" style="width:${pW}%;background:${gColor(pW)}"></div></div>
@@ -1775,7 +1821,7 @@ function renderKiosques() {
           h += `<div class="ks-sc-goal">
             <div class="ks-sc-goal-row">
               <span style="font-size:.65rem;color:var(--muted)">Mês ${R(s.liq||0)}</span>
-              <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spM)}">${spM.toFixed(0)}%</span>
+              <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spM)}">${floorPct(spM)}%</span>
             </div>
             <div class="mb"><div class="mf" style="width:${Math.min(spM,100)}%;background:${gColor(spM)}"></div></div>
             ${mPrize?`<span class="gbadge ${mPrize.label.toLowerCase()}" style="margin-top:4px">${mPrize.label} +R$${mPrize.prize}</span>`:''}
@@ -1785,7 +1831,7 @@ function renderKiosques() {
           h += `<div class="ks-sc-goal">
             <div class="ks-sc-goal-row">
               <span style="font-size:.65rem;color:var(--muted)">Sem ${R(swL)}</span>
-              <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spW)}">${spW.toFixed(0)}%</span>
+              <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spW)}">${floorPct(spW)}%</span>
             </div>
             <div class="mb"><div class="mf" style="width:${Math.min(spW,100)}%;background:${gColor(spW)}"></div></div>
             ${prize?`<span class="gbadge ${prize.label.toLowerCase()}" style="margin-top:4px">${prize.label} +R$${prize.prize}</span>`:''}
@@ -2141,7 +2187,7 @@ function renderPremiacoes() {
       <td style="color:var(--muted);font-size:.8rem">${sK(kName)}</td>
       <td class="mo num">${R(s.liq||0)}</td>
       <td class="mo num">${sgm?R(sgm):'—'}</td>
-      <td class="num" style="color:${sgm?gColor(spM):'var(--muted)'}"><strong>${sgm?spM.toFixed(0)+'%':'—'}</strong></td>
+      <td class="num" style="color:${sgm?gColor(spM):'var(--muted)'}"><strong>${sgm?floorPct(spM)+'%':'—'}</strong></td>
       <td>${mp?`<span class="gbadge ${cls}">${mp.label}</span>`:'<span style="color:var(--muted);font-size:.75rem">—</span>'}</td>
       <td class="mo num">${mp?`<strong>R$&nbsp;${mp.prize.toFixed(2).replace('.',',')}</strong>`:'—'}</td>
     </tr>`;
@@ -2173,7 +2219,7 @@ function renderPremiacoes() {
           <td style="color:var(--muted);font-size:.8rem">${sK(kName)}</td>
           <td class="mo num">${R(swL)}</td>
           <td class="mo num">${sgw?R(sgw):'—'}</td>
-          <td class="num" style="color:${sgw?gColor(spW):'var(--muted)'}"><strong>${sgw?spW.toFixed(0)+'%':'—'}</strong></td>
+          <td class="num" style="color:${sgw?gColor(spW):'var(--muted)'}"><strong>${sgw?floorPct(spW)+'%':'—'}</strong></td>
           <td>${prize?`<span class="gbadge ${cls}">${prize.label}</span>`:'<span style="color:var(--muted);font-size:.75rem">—</span>'}</td>
           <td class="mo num">${prize?`<strong>R$&nbsp;${prize.prize.toFixed(2).replace('.',',')}</strong>`:'—'}</td>
         </tr>`;
