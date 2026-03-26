@@ -10,13 +10,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- Firebase SDK -->
-<script type="module">
-import { initializeApp }
-  from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot }
-  from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
+<script type="module">// ══════════════════════════════════════════════════════════
+//  AUTH MODULE (type="module") — replaces current auth block
+// ══════════════════════════════════════════════════════════
+
+import { initializeApp }        from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, collection, query, where,
+         getDocs, updateDoc, onSnapshot, serverTimestamp }
+         from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword,
+         signInWithEmailAndPassword, signOut, onAuthStateChanged }
+         from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDIh81rAN7RSE8QcC5TUX0utYQKrarEdM0",
@@ -27,13 +31,21 @@ const firebaseConfig = {
   appId:             "1:426898777738:web:1fc62d5dda89389d2c2f73"
 };
 
-/* ── Firestore rules (deploy in Firebase console):
+/* ── Firestore rules (update in Firebase console):
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /app/{doc} {
       allow read:  if true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null
+                   && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+    match /users/{uid} {
+      allow read:  if request.auth != null && (request.auth.uid == uid
+                   || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coordenador','admin']);
+      allow create: if true;  // allow self-registration
+      allow update: if request.auth != null
+                   && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coordenador','admin'];
     }
   }
 }
@@ -42,138 +54,214 @@ service cloud.firestore {
 const app  = initializeApp(firebaseConfig);
 const db   = getFirestore(app);
 const auth = getAuth(app);
-const REF_STORE = doc(db, 'app', 'store');
-const REF_GOALS = doc(db, 'app', 'goals');
 
-// ── Persistência ────────────────────────────────────────
-window.fbSaveStore = async function(data) {
-  await setDoc(REF_STORE, data);
-};
+const REF_STORE     = doc(db, 'app', 'store');
+const REF_GOALS     = doc(db, 'app', 'goals');
 const REF_ANALYTICS = doc(db, 'app', 'analytics');
-window.fbSaveAnalytics = async function(data) {
-  await setDoc(REF_ANALYTICS, data);
-};
-// Load analytics on startup
-window._analytics = { skus:{}, transactions:{} };
-onSnapshot(REF_ANALYTICS, snap => {
-  window._analytics = snap.exists() ? snap.data() : { skus:{}, transactions:{} };
-  if (document.getElementById('pnl-estoque')?.classList.contains('on')) window.renderEstoque?.();
-}, err => console.warn('analytics:', err));
-window.fbResetStore = async function() {
-  const empty = { period:null, importedAt:null, gtLiq:0, gtPecas:0,
-                  kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
-  await setDoc(REF_STORE, empty);
-};
-window.fbSaveGoals = async function(data) {
-  await setDoc(REF_GOALS, data);
+
+// ── Role config ─────────────────────────────────────────
+const ROLES = {
+  vendedor:    { label: 'Vendedor',       level: 1 },
+  gerente:     { label: 'Gerente de Loja',level: 2 },
+  coordenador: { label: 'Coordenador',    level: 3 },
+  admin:       { label: 'Admin Geral',    level: 4 },
 };
 
-// ── Listeners em tempo real ──────────────────────────────
-// Usamos uma flag para não renderizar antes de ambos os docs chegarem
-let storeLoaded = false, goalsLoaded = false;
+// Tabs each role can see (cumulative: higher includes lower)
+const ROLE_TABS = {
+  vendedor:    ['geral','kiosques'],
+  gerente:     ['geral','kiosques','consolidado','premiacoes'],
+  coordenador: ['geral','kiosques','consolidado','premiacoes','estoque','goals','aprovacao'],
+  admin:       ['geral','kiosques','consolidado','premiacoes','estoque','import','goals','aprovacao'],
+};
 
-onSnapshot(REF_STORE, snap => {
-  if (!snap.exists()) { storeLoaded = true; tryRender(); return; }
-  window._store = snap.data();
-  storeLoaded = true;
-  tryRender();
-}, err => { storeLoaded = true; console.warn('store:', err); });
-
-// Sanitize goals: strip any values that are template literal strings (corrupted saves)
-function sanitizeGoals(g) {
-  if (!g) return { kiosks:{}, sellers:{} };
-  const isCorrupt = v => typeof v === 'string' && v.includes('${');
-  const cleanNum  = v => (isCorrupt(v) || isNaN(parseFloat(v))) ? 0 : parseFloat(v);
-  const cleanObj  = obj => {
-    if (!obj || typeof obj !== 'object') return {};
-    const out = {};
-    for (const [k,v] of Object.entries(obj)) {
-      out[k] = isCorrupt(v) ? 0 : (typeof v === 'number' ? v : (typeof v === 'object' ? cleanObj(v) : v));
-    }
-    return out;
-  };
-  const cleanKiosk = G => {
-    if (!G) return {};
-    return {
-      monthlyByMonth: cleanObj(G.monthlyByMonth||{}),
-      weeklyOverride: cleanObj(G.weeklyOverride||{}),
-      activeSellers:  Array.isArray(G.activeSellers) ? G.activeSellers.filter(s=>typeof s==='string'&&!isCorrupt(s)) : [],
-      dailyByDate:    cleanObj(G.dailyByDate||{}),
-    };
-  };
-  const cleanSeller = S => {
-    if (!S) return {};
-    return {
-      overrideMonthly: cleanObj(S.overrideMonthly||{}),
-      overrideWeekly:  cleanObj(S.overrideWeekly||{}),
-    };
-  };
-  return {
-    kiosks:    Object.fromEntries(Object.entries(g.kiosks||{}).map(([k,v]) => [k, cleanKiosk(v)])),
-    sellers:   Object.fromEntries(Object.entries(g.sellers||{}).map(([k,v]) => [k, cleanSeller(v)])),
-    inventory: g.inventory ? { targetDays: g.inventory.targetDays||30, stock: cleanObj(g.inventory.stock||{}) } : undefined,
-  };
+function canAccessTab(tab) {
+  const role = window._userRole || 'vendedor';
+  return (ROLE_TABS[role] || ROLE_TABS.vendedor).includes(tab);
 }
 
-onSnapshot(REF_GOALS, snap => {
-  if (!snap.exists()) { goalsLoaded = true; tryRender(); return; }
-  window._goals = sanitizeGoals(snap.data());
-  goalsLoaded = true;
-  tryRender();
-  if (document.getElementById('pnl-goals')?.classList.contains('on')) window.renderGoals?.();
-}, err => { goalsLoaded = true; console.warn('goals:', err); });
-
-function tryRender() {
-  // Only render dashboards after BOTH docs have loaded at least once
-  // Use window.* calls because this module may fire (via Firestore cache) before
-  // the regular script tag has executed, so direct function refs may not exist yet.
-  if (!storeLoaded || !goalsLoaded) return;
-  if (Object.keys(window._store?.kiosks || {}).length > 0) {
-    window.renderGeral?.();
-    window.renderKiosques?.();
-  } else {
-    window.showEmptyState?.();
-  }
+// ── CPF helpers ──────────────────────────────────────────
+function cpfToEmail(cpf) {
+  return cpf.replace(/\D/g,'') + '@sg.internal';
+}
+function formatCPF(v) {
+  return v.replace(/\D/g,'').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+}
+function validateCPF(cpf) {
+  const c = cpf.replace(/\D/g,'');
+  if (c.length !== 11 || /^(\d)\1+$/.test(c)) return false;
+  let sum = 0;
+  for (let i=0; i<9; i++) sum += parseInt(c[i]) * (10-i);
+  let r = (sum*10) % 11; if (r === 10 || r === 11) r = 0;
+  if (r !== parseInt(c[9])) return false;
+  sum = 0;
+  for (let i=0; i<10; i++) sum += parseInt(c[i]) * (11-i);
+  r = (sum*10) % 11; if (r === 10 || r === 11) r = 0;
+  return r === parseInt(c[10]);
 }
 
-// ── Auth ─────────────────────────────────────────────────
-onAuthStateChanged(auth, user => {
-  window._isAdmin = !!user;
-  const btn  = document.getElementById('btnLogin');
-  const chip = document.getElementById('chip');
+// ── Auth state ───────────────────────────────────────────
+window._isAdmin   = false;
+window._userRole  = null;
+window._userProfile = null;
+
+onAuthStateChanged(auth, async user => {
   if (user) {
-    btn.style.display = 'none';
-    chip.classList.add('show');
-    document.getElementById('chipName').textContent = user.email.split('@')[0];
-    document.querySelectorAll('.admin-only').forEach(el => el.classList.add('show'));
-  } else {
-    btn.style.display = '';
-    chip.classList.remove('show');
-    document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('show'));
-    const active = document.querySelector('.pnl.on');
-    if (active && (active.id === 'pnl-import' || active.id === 'pnl-goals')) {
-      nav('geral', document.querySelector('.tab'));
-    }
+    // Load user profile from Firestore
+    try {
+      const snap = await getDoc(doc(db,'users',user.uid));
+      if (snap.exists()) {
+        const profile = snap.data();
+        window._userProfile = profile;
+        window._userRole    = profile.role || 'vendedor';
+        window._isAdmin     = ['coordenador','admin'].includes(profile.role);
+
+        if (profile.status !== 'active') {
+          // Pending or rejected — show waiting screen
+          showPendingScreen(profile);
+          await signOut(auth);
+          return;
+        }
+        // Show UI
+        applyRoleUI(profile);
+        closeAuthScreens();
+        window.tryRender?.();
+        return;
+      }
+    } catch(e) { console.warn('profile load:', e); }
   }
+  // Not logged in
+  window._isAdmin     = false;
+  window._userRole    = null;
+  window._userProfile = null;
+  applyRoleUI(null);
+  showLoginScreen();
 });
 
-window._doLogin = async (email, password) => {
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-    closeLogin();
-    document.getElementById('me').textContent = '';
-  } catch(e) {
-    const msgs = {
-      'auth/invalid-credential':'Email ou senha incorretos',
-      'auth/user-not-found':'Usuário não encontrado',
-      'auth/wrong-password':'Senha incorreta',
-      'auth/invalid-email':'Email inválido',
-      'auth/too-many-requests':'Muitas tentativas. Aguarde.',
-    };
-    document.getElementById('me').textContent = msgs[e.code] || e.message;
-  }
+function applyRoleUI(profile) {
+  const role     = profile?.role || null;
+  const name     = profile?.name || '';
+  const allTabs  = ROLE_TABS[role] || [];
+
+  // Show/hide tabs
+  document.querySelectorAll('.tab[data-tab]').forEach(btn => {
+    const tab = btn.dataset.tab;
+    btn.style.display = allTabs.includes(tab) ? '' : 'none';
+  });
+
+  // User chip
+  const chip = document.getElementById('userChip');
+  const pName = document.getElementById('pName');
+  const roleChip = document.getElementById('roleChip');
+  if (chip) chip.classList.toggle('show', !!profile);
+  if (pName) pName.textContent = name.split(' ')[0];
+  if (roleChip) roleChip.textContent = ROLES[role]?.label || '';
+
+  // Login/logout button
+  const btnLogin = document.getElementById('btnLogin');
+  if (btnLogin) btnLogin.style.display = profile ? 'none' : '';
+}
+
+// ── Save / load ──────────────────────────────────────────
+window.fbSaveStore     = async d => { await setDoc(REF_STORE, d); };
+window.fbSaveGoals     = async d => { await setDoc(REF_GOALS, d); };
+window.fbResetStore    = async d => { await setDoc(REF_STORE, d); };
+window.fbSaveAnalytics = async d => { await setDoc(REF_ANALYTICS, d); };
+
+let _unsubStore=null, _unsubGoals=null, _unsubAnalytics=null;
+
+function startListeners() {
+  if (_unsubStore) return;
+  _unsubStore = onSnapshot(REF_STORE, snap => {
+    window._store = snap.exists() ? snap.data() : { kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
+    window.tryRender?.();
+  });
+  _unsubGoals = onSnapshot(REF_GOALS, snap => {
+    const raw = snap.exists() ? snap.data() : { kiosks:{}, sellers:{} };
+    window._goals = window.sanitizeGoals ? window.sanitizeGoals(raw) : raw;
+    window.tryRender?.();
+  }, err => console.warn('goals:', err));
+  _unsubAnalytics = onSnapshot(REF_ANALYTICS, snap => {
+    window._analytics = snap.exists() ? snap.data() : { skus:{}, transactions:{} };
+    if (document.getElementById('pnl-estoque')?.classList.contains('on')) window.renderEstoque?.();
+  }, err => console.warn('analytics:', err));
+}
+
+// ── Registration ─────────────────────────────────────────
+window._doRegister = async ({ name, cpf, dob, password, role }) => {
+  const email = cpfToEmail(cpf);
+  const cred  = await createUserWithEmailAndPassword(auth, email, password);
+  await setDoc(doc(db, 'users', cred.user.uid), {
+    uid:       cred.user.uid,
+    name,
+    cpf:       cpf.replace(/\D/g,''),
+    dob,
+    role:      role || 'vendedor',
+    status:    'pending',
+    createdAt: new Date().toISOString(),
+    email,
+  });
+  await signOut(auth);  // sign out until approved
+  return cred.user.uid;
 };
-window._doLogout = () => signOut(auth);
+
+// ── Login ────────────────────────────────────────────────
+window._doLogin = async (cpf, password) => {
+  const email = cpfToEmail(cpf.replace(/\D/g,''));
+  await signInWithEmailAndPassword(auth, email, password);
+  startListeners();
+};
+
+window._doSignOut = async () => {
+  await signOut(auth);
+  if (_unsubStore)     { _unsubStore(); _unsubStore = null; }
+  if (_unsubGoals)     { _unsubGoals(); _unsubGoals = null; }
+  if (_unsubAnalytics) { _unsubAnalytics(); _unsubAnalytics = null; }
+  window._store = { kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
+  window._goals = { kiosks:{}, sellers:{} };
+};
+
+// ── User management (for approval tab) ──────────────────
+window.fbLoadPendingUsers = async () => {
+  const q = query(collection(db,'users'), where('status','==','pending'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data());
+};
+window.fbLoadAllUsers = async () => {
+  const snap = await getDocs(collection(db,'users'));
+  return snap.docs.map(d => d.data());
+};
+window.fbApproveUser = async (uid, role) => {
+  await updateDoc(doc(db,'users',uid), { status:'active', role, approvedAt: new Date().toISOString() });
+};
+window.fbRejectUser = async (uid) => {
+  await updateDoc(doc(db,'users',uid), { status:'rejected', rejectedAt: new Date().toISOString() });
+};
+window.fbUpdateUserRole = async (uid, role) => {
+  await updateDoc(doc(db,'users',uid), { role });
+};
+
+// Start listeners immediately (data is public read)
+startListeners();
+
+// ── Screen helpers ───────────────────────────────────────
+function showLoginScreen()    { document.getElementById('authScreen')?.classList.add('show'); }
+function closeAuthScreens()   { document.getElementById('authScreen')?.classList.remove('show'); }
+function showPendingScreen(p) {
+  const el = document.getElementById('pendingMsg');
+  if (el) el.textContent = p.status === 'rejected'
+    ? 'Seu acesso foi recusado. Entre em contato com o coordenador.'
+    : 'Seu cadastro está aguardando aprovação. Você receberá acesso em breve.';
+  document.getElementById('authScreen')?.classList.add('show');
+  showAuthTab('pending');
+}
+
+window.canAccessTab = canAccessTab;
+window.ROLES        = ROLES;
+window.ROLE_TABS    = ROLE_TABS;
+window.validateCPF  = validateCPF;
+window.formatCPF    = formatCPF;
+window.cpfToEmail   = cpfToEmail;
 </script>
 
 <style>
@@ -479,6 +567,34 @@ tr.inactive td{opacity:.35}
 .gc-chart-wrap{padding:14px 18px;border-top:1px solid var(--border)}
 .gc-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 
+/* ── AUTH SCREEN ── */
+.auth-screen{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);backdrop-filter:blur(8px);z-index:300;align-items:center;justify-content:center}
+.auth-screen.show{display:flex}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px 28px;width:min(420px,calc(100vw - 32px));max-height:90vh;overflow-y:auto}
+.auth-logo{font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:24px}
+.auth-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;gap:0}
+.auth-tab-btn{flex:1;padding:10px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:.82rem;cursor:pointer;transition:all .15s;margin-bottom:-1px}
+.auth-tab-btn.on{color:var(--text);border-bottom-color:var(--text)}
+.auth-tab-pane{display:none}
+.auth-tab-pane.on{display:block}
+.auth-field{margin-bottom:14px}
+.auth-lbl{display:block;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.auth-inp{width:100%;height:40px;padding:0 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:.88rem;outline:none;box-sizing:border-box;transition:border-color .15s}
+.auth-inp:focus{border-color:#555}
+select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%23666'%3E%3Cpath d='M0 0l6 8 6-8z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;cursor:pointer}
+.auth-err{font-size:.78rem;color:var(--danger);min-height:18px;margin-bottom:8px}
+.auth-btn{width:100%;height:42px;font-size:.88rem;margin-top:4px}
+
+/* ── APPROVAL TABLE ── */
+#aprovacaoBody table th{text-align:left;color:var(--muted);font-size:.65rem;letter-spacing:.08em;padding:8px 12px;border-bottom:1px solid var(--border)}
+#aprovacaoBody table td{vertical-align:middle}
+
+/* ── TOPBAR USER CHIP ── */
+.chip{display:none;align-items:center;gap:8px;font-size:.78rem;color:var(--text)}
+.chip.show{display:flex}
+.chip button{background:none;border:none;color:var(--muted);font-size:.75rem;cursor:pointer;padding:2px 6px}
+.chip button:hover{color:var(--text)}
+
 /* ── OPENING DAY PANEL ── */
 .day-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px}
 .day-panel-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--surface2)}
@@ -536,7 +652,13 @@ tr.inactive td{opacity:.35}
 /* ── ESTOQUE IMPORT PANEL ── */
 .stock-import-panel{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:14px}
 .stock-import-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-.stock-import-summary{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px}
+.stock-preview{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.stock-preview-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.stock-preview-modes{display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap}
+.stock-mode-opt{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted);cursor:pointer}
+.stock-mode-opt input[type=radio]{accent-color:var(--text)}
+.stock-preview-table-wrap{border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.stock-chk-cell{text-align:center}
 
 /* ── ESTOQUE MODULE ── */
 .est-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
@@ -670,17 +792,18 @@ tr.inactive td{opacity:.35}
 <header class="topbar">
   <div class="logo">Saint Germain</div>
   <nav class="tabs">
-    <button class="tab on"              onclick="nav('geral',this)">Painel Geral</button>
-    <button class="tab"                 onclick="nav('kiosques',this)">Quiosques</button>
-    <button class="tab admin-only" id="tabConsolidado" onclick="nav('consolidado',this)">Consolidado</button>
-    <button class="tab admin-only" id="tabPremiacoes" onclick="nav('premiacoes',this)">Premiações</button>
-    <button class="tab admin-only" id="tabEstoque"     onclick="nav('estoque',this)">Estoque</button>
-    <button class="tab admin-only" id="tabImport"      onclick="nav('import',this)">Importar</button>
-    <button class="tab admin-only" id="tabGoals"       onclick="nav('goals',this)">Metas</button>
+    <button class="tab on" data-tab="geral" onclick="nav('geral',this)">Painel Geral</button>
+    <button class="tab" data-tab="kiosques" onclick="nav('kiosques',this)">Quiosques</button>
+    <button class="tab admin-only" data-tab="consolidado" id="tabConsolidado" onclick="nav('consolidado',this)">Consolidado</button>
+    <button class="tab admin-only" data-tab="premiacoes" id="tabPremiacoes" onclick="nav('premiacoes',this)">Premiações</button>
+    <button class="tab admin-only" data-tab="aprovacao" id="tabAprovacao"     onclick="nav('aprovacao',this)">Aprovação</button>
+    <button class="tab admin-only" data-tab="estoque" id="tabEstoque"     onclick="nav('estoque',this)">Estoque</button>
+    <button class="tab admin-only" data-tab="import" id="tabImport"      onclick="nav('import',this)">Importar</button>
+    <button class="tab admin-only" data-tab="goals" id="tabGoals"       onclick="nav('goals',this)">Metas</button>
   </nav>
   <div class="bar-r">
-    <div class="chip" id="chip"><span class="chip-name" id="chipName"></span><button onclick="window._doLogout()">sair</button></div>
-    <button class="btn-outline" id="btnLogin" onclick="openLogin()">Entrar</button>
+    <div class="chip show" id="userChip"><span id="pName"></span><span id="roleChip" style="font-size:.6rem;color:var(--muted);margin-left:4px"></span><button onclick="doSignOut()">sair</button></div>
+    <button class="btn-outline" id="btnLogin" onclick="document.getElementById('authScreen').classList.add('show');showAuthTab('login')" style="display:none">Entrar</button>
   </div>
 </header>
 
@@ -714,6 +837,12 @@ tr.inactive td{opacity:.35}
   <div id="estoqueBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
 </section>
 
+<section class="pnl" id="pnl-aprovacao">
+  <div class="h1">Aprovação de Usuários</div>
+  <div class="sub">Gerencie acessos e níveis de permissão</div>
+  <div id="aprovacaoBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
+</section>
+
 <section class="pnl" id="pnl-import">
   <div class="h1">Importar Relatório</div><div class="sub">PDVSuite · VENRES.RPT</div>
   <div class="notice">Aceita os formatos <strong>Resumido</strong> (VENRES.RPT) e <strong>Analítico</strong> (VENDEDOR.RPT). O formato é detectado automaticamente. O analítico também atualiza o módulo de Estoque.</div>
@@ -732,12 +861,78 @@ tr.inactive td{opacity:.35}
   <div id="goalsBody"><div class="empty"><div class="ei">○</div><div class="et">Importe um relatório primeiro</div></div></div>
 </section>
 
-<div class="ov" id="ov">
-  <div class="modal">
-    <button class="mx" onclick="closeLogin()">✕</button>
-    <div class="modal-handle"></div>
-    <div class="mt">Acesso admin</div>
-    <div class="ms2">Use as credenciais do Firebase Authentication</div>
+<div id="authScreen" class="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">SAINT GERMAIN</div>
+
+    <!-- Tab buttons -->
+    <div class="auth-tabs" id="authTabs">
+      <button class="auth-tab-btn on" data-tab="login"    onclick="showAuthTab('login')">Entrar</button>
+      <button class="auth-tab-btn"    data-tab="register" onclick="showAuthTab('register')">Cadastrar</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="auth-tab-pane on" id="auth-pane-login">
+      <div class="auth-field">
+        <label class="auth-lbl">CPF</label>
+        <input class="auth-inp" id="loginCpf" type="text" inputmode="numeric"
+          placeholder="000.000.000-00" maxlength="14"
+          oninput="onCpfInput(this)"
+          onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
+      </div>
+      <div class="auth-field">
+        <label class="auth-lbl">Senha</label>
+        <input class="auth-inp" id="loginPass" type="password" placeholder="••••••"
+          onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div class="auth-err" id="loginErr"></div>
+      <button class="btn-primary auth-btn" id="btnLoginSubmit" onclick="doLogin()">Entrar</button>
+    </div>
+
+    <!-- REGISTER -->
+    <div class="auth-tab-pane" id="auth-pane-register">
+      <div class="auth-field">
+        <label class="auth-lbl">Nome Completo</label>
+        <input class="auth-inp" id="regName" type="text" placeholder="Seu nome completo">
+      </div>
+      <div class="auth-field">
+        <label class="auth-lbl">CPF</label>
+        <input class="auth-inp" id="regCpf" type="text" inputmode="numeric"
+          placeholder="000.000.000-00" maxlength="14" oninput="onCpfInput(this)">
+      </div>
+      <div class="auth-field">
+        <label class="auth-lbl">Data de Nascimento</label>
+        <input class="auth-inp" id="regDob" type="date">
+      </div>
+      <div class="auth-field">
+        <label class="auth-lbl">Perfil solicitado</label>
+        <select class="auth-inp" id="regRole">
+          <option value="vendedor">Vendedor</option>
+          <option value="gerente">Gerente de Loja</option>
+          <option value="coordenador">Coordenador</option>
+        </select>
+      </div>
+      <div class="auth-field">
+        <label class="auth-lbl">Senha</label>
+        <input class="auth-inp" id="regPass" type="password" placeholder="Mínimo 6 caracteres">
+      </div>
+      <div class="auth-field">
+        <label class="auth-lbl">Confirmar Senha</label>
+        <input class="auth-inp" id="regPass2" type="password" placeholder="Repita a senha"
+          onkeydown="if(event.key==='Enter')doRegister()">
+      </div>
+      <div class="auth-err" id="regErr"></div>
+      <button class="btn-primary auth-btn" id="btnRegSubmit" onclick="doRegister()">Cadastrar</button>
+    </div>
+
+    <!-- PENDING -->
+    <div class="auth-tab-pane" id="auth-pane-pending" style="text-align:center;padding:12px 0">
+      <div style="font-size:1.4rem;margin-bottom:10px">⏳</div>
+      <div id="pendingMsg" style="font-size:.85rem;color:var(--muted);line-height:1.6"></div>
+      <button class="btn-secondary" onclick="showAuthTab('login')" style="margin-top:16px;height:34px;padding:0 14px">Voltar</button>
+    </div>
+  </div>
+</div>
     <div class="fld">
       <label class="fl">Email</label>
       <input class="fi2" id="inU" type="email" placeholder="admin@exemplo.com"
@@ -801,564 +996,229 @@ function nav(id,btn){
   if(id==='consolidado') renderConsolidado();
   if(id==='premiacoes') renderPremiacoes();
   if(id==='estoque') renderEstoque();
+  if(id==='aprovacao') renderAprovacao();
 }
 
-// ── MODAL LOGIN ──
-function openLogin(){document.getElementById('ov').classList.add('show');setTimeout(()=>document.getElementById('inU').focus(),80);}
-function closeLogin(){document.getElementById('ov').classList.remove('show');}
-document.getElementById('ov').addEventListener('click',e=>{if(e.target===e.currentTarget)closeLogin();});
-async function doLogin(){
-  const email=document.getElementById('inU').value.trim();
-  const pass=document.getElementById('inP').value;
-  const btn=document.getElementById('btnLoginSubmit');
-  if(!email||!pass){document.getElementById('me').textContent='Preencha todos os campos';return;}
-  btn.disabled=true;btn.textContent='Entrando…';
-  await window._doLogin(email,pass);
-  btn.disabled=false;btn.textContent='Entrar';
-}
-
-// ── FILE DROP ──
-const dropEl=document.getElementById('drop');
-dropEl.addEventListener('dragover',e=>{e.preventDefault();dropEl.classList.add('over');});
-dropEl.addEventListener('dragleave',()=>dropEl.classList.remove('over'));
-dropEl.addEventListener('drop',e=>{e.preventDefault();dropEl.classList.remove('over');const f=e.dataTransfer.files[0];if(f)readFile(f);});
-function onFile(e){readFile(e.target.files[0]);}
-let rawCSV=null;
-function readFile(f){
-  resetLog();log(`📄 ${f.name}  (${(f.size/1024).toFixed(1)} KB)`,'info');
-  const r=new FileReader();
-  r.onload=ev=>{
-    rawCSV=ev.target.result;
-    const fmt=detectCSVFormat(rawCSV);
-    const ok=fmt==='analytic';
-    log(`✓ Lido — ${rawCSV.split('\n').length} linhas · ${ok?'✓ Analítico':'✗ Formato resumido — use o relatório Analítico (VENDEDOR.RPT)'}`,ok?'ok':'err');
-    preview(rawCSV);
-    document.getElementById('btnProc').disabled=!ok;
-  };
-  r.readAsText(f,'UTF-8');
-}
-function resetLog(){document.getElementById('logbox').innerHTML='';}
-function log(msg,cls='dim'){const l=document.getElementById('logbox');const d=document.createElement('div');d.className='ll '+cls;d.textContent=msg;l.appendChild(d);l.scrollTop=l.scrollHeight;}
 
 // ══════════════════════════════════════════════════════════
-//  RENDER HELPERS
+//  AUTH UI — Login, Register, Approval screens (regular script)
 // ══════════════════════════════════════════════════════════
-const R=v=>'R$\u00a0'+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const sK=n=>n.replace('QUIOSQUE ','').replace(' SHOPPING','').replace(' PLAZA','').replace(/\s+/g,' ').trim();
-const CLRS=['rgba(255,255,255,.90)','rgba(255,255,255,.65)','rgba(255,255,255,.42)','rgba(255,255,255,.25)'];
-// Per-kiosk accent colors (chart lines + card accents)
-const KC = [
-  { line:'#60a5fa', fill:'rgba(96,165,250,.12)',  border:'rgba(96,165,250,.25)'  },  // blue
-  { line:'#34d399', fill:'rgba(52,211,153,.12)',  border:'rgba(52,211,153,.25)'  },  // green
-  { line:'#f59e0b', fill:'rgba(245,158,11,.12)',  border:'rgba(245,158,11,.25)'  },  // amber
-  { line:'#f472b6', fill:'rgba(244,114,182,.12)', border:'rgba(244,114,182,.25)' },  // pink
-];
-let chartInstances={};
-function destroyChart(id){if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}}
 
-// Floor to 1 decimal place (always rounds down)
-const floorPct = p => (Math.floor(p * 10) / 10).toFixed(1);
-function gColor(pct){
-  if(pct===0)return'var(--border)';
-  if(pct>=100)return'var(--success)';
-  if(pct>=70)return'#f0a500';
-  return'var(--danger)';
-}
-function gBadge(actual,goal){
-  if(!goal)return'';
-  const p=(actual/goal)*100;
-  const cls=p>=100?'hit':p>=70?'warn':'miss';
-  return`<span class="gbadge ${cls}">${floorPct(p)}%</span>`;
-}
-function gBar(actual,goal,opts=''){
-  if(!goal)return`<span style="font-size:.72rem;color:var(--muted)">—</span>`;
-  const p=Math.min((actual/goal)*100,100);
-  return`<div class="gp" ${opts}>
-    <div class="gp-row"><span style="color:var(--muted)">${R(goal)}</span>${gBadge(actual,goal)}</div>
-    <div class="mb"><div class="mf" style="width:${p}%;background:${gColor(p*100/100)}"></div></div>
-  </div>`;
-}
-function gBarWithAccum(actual,goal,accum){
-  if(!goal)return`<span style="font-size:.72rem;color:var(--muted)">—</span>`;
-  const p=Math.min((accum/goal)*100,100);
-  return`<div class="gp">
-    <div class="gp-row"><span style="color:var(--muted)">${R(goal)}</span>${gBadge(accum,goal)}</div>
-    <div class="mb"><div class="mf" style="width:${p}%;background:${gColor(p*100/100)}"></div></div>
-    <div class="gp-meta">${R(accum)} acum.</div>
-  </div>`;
+// ── Auth screen tab switching ────────────────────────────
+function showAuthTab(tab) {
+  document.querySelectorAll('.auth-tab-pane').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.auth-tab-btn').forEach(b => b.classList.remove('on'));
+  document.getElementById('auth-pane-'+tab)?.classList.add('on');
+  document.querySelector(`.auth-tab-btn[data-tab="${tab}"]`)?.classList.add('on');
 }
 
-// ══════════════════════════════════════════════════════════
-//  GOALS HELPERS
-// ══════════════════════════════════════════════════════════
-const MONTH_NAMES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-function monthLabel(ym){const[y,m]=ym.split('-').map(Number);return`${MONTH_NAMES[m-1]} ${y}`;}
-
-function weeksInMonth(year,month){
-  const result=[];let d=new Date(year,month-1,1);
-  while(d.getDay()!==1)d=new Date(d.getTime()+86400000);
-  while(d.getMonth()===month-1){
-    const sun=new Date(d.getTime()+6*86400000);
-    const monKey=d.toISOString().slice(0,10);
-    const fmt=dt=>dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-    const monday=new Date(d);  // snapshot current d as monday
-    result.push({monKey,label:`${fmt(d)} – ${fmt(sun)}`,
-                 monday,sunday:sun,crossMonth:sun.getMonth()!==d.getMonth()});
-    d=new Date(d.getTime()+7*86400000);
-  }
-  return result;
+// ── CPF input formatting ─────────────────────────────────
+function onCpfInput(el) {
+  let v = el.value.replace(/\D/g,'').slice(0,11);
+  v = v.replace(/(\d{3})(\d)/,'$1.$2')
+       .replace(/(\d{3})\.(\d{3})(\d)/,'$1.$2.$3')
+       .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/,'$1.$2.$3-$4');
+  el.value = v;
 }
 
-function availableMonths(){
-  const set=new Set();
-  (store.dateRange||[]).forEach(d=>set.add(d.slice(0,7)));
-  const sorted=[...set].sort();
-  if(sorted.length){
-    const[y,m]=sorted[sorted.length-1].split('-').map(Number);
-    for(let delta=1;delta<=2;delta++){const nm=m+delta;const ny=y+Math.floor((nm-1)/12);const mm=((nm-1)%12)+1;set.add(`${ny}-${String(mm).padStart(2,'0')}`);}
-  }
-  if(!set.size){const now=new Date();set.add(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);}
-  return[...set].sort();
-}
+// ── Login ────────────────────────────────────────────────
+async function doLogin() {
+  const cpf  = document.getElementById('loginCpf').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const err  = document.getElementById('loginErr');
+  const btn  = document.getElementById('btnLoginSubmit');
 
-// Week context: last date in store.dateRange
-function getWeekCtx(){
-  const dr=store.dateRange||[];
-  if(!dr.length)return null;
-  const lastDate=new Date([...dr].sort().slice(-1)[0]+'T00:00:00');
-  const dow=lastDate.getDay();const dfm=dow===0?6:dow-1;
-  const mon=new Date(lastDate);mon.setDate(mon.getDate()-dfm);
-  const sun=new Date(mon);sun.setDate(sun.getDate()+6);
-  const fmt=dt=>dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-  return{monday:mon,sunday:sun,monKey:mon.toISOString().slice(0,10),
-         monthKey:mon.toISOString().slice(0,7),label:`${fmt(mon)} – ${fmt(sun)}`};
-}
+  if (!cpf || !pass) { err.textContent = 'Preencha CPF e senha.'; return; }
+  const rawCpf = cpf.replace(/\D/g,'');
+  if (rawCpf.length !== 11) { err.textContent = 'CPF inválido.'; return; }
 
-function kWeekLiq(kName,mon,sun){
-  const K=store.kiosks[kName];if(!K)return 0;
-  let s=0;
-  for(const[d,v] of Object.entries(K.byDate||{})){const dt=new Date(d+'T00:00:00');if(dt>=mon&&dt<=sun)s+=v.liq||0;}
-  return s;
-}
-function sWeekLiq(kName,sName,mon,sun){
-  const S=(store.kiosks[kName]||{}).sellers?.[sName];if(!S)return 0;
-  let s=0;
-  for(const[d,v] of Object.entries(S.byDate||{})){const dt=new Date(d+'T00:00:00');if(dt>=mon&&dt<=sun)s+=v.liq||0;}
-  return s;
-}
-
-// ── Goal computation ────────────────────────────────────
-// Active sellers for a kiosk (falls back to all if none configured)
-function activeSellers(kName){
-  const G=goals.kiosks[kName];
-  const configured=G?.activeSellers||[];
-  if(configured.length>0) return configured;
-  return Object.keys(store.kiosks[kName]?.sellers||{});
-}
-
-// Kiosk monthly goal (total configured directly)
-function kioskMonthGoal(kName, monthKey) {
-  const manual = goals.kiosks[kName]?.monthlyByMonth?.[monthKey] || 0;
-  if (manual) return manual;
-  return kioskMonthGoalFromDaily(kName, monthKey);
-}
-
-// Kiosk weekly goal for a specific Monday key
-// Uses weeklyOverride if set, else weeklyDefault
-function kioskWeekGoal(kName, monKey, monday, sunday) {
-  const G = goals.kiosks[kName]; if (!G) return 0;
-  if (G.weeklyOverride?.[monKey]) return G.weeklyOverride[monKey];
-  if (monday && sunday) return kioskWeekGoalFromDaily(kName, monday, sunday);
-  // fallback: compute monday/sunday from monKey
-  const mon = new Date(monKey+'T00:00:00');
-  const sun = new Date(mon.getTime()+6*86400000);
-  return kioskWeekGoalFromDaily(kName, mon, sun);
-}
-
-// Seller monthly goal = kiosk total ÷ n° active sellers
-function sellerMonthGoal(kName, monthKey) {
-  const total=kioskMonthGoal(kName, monthKey);if(!total)return 0;
-  const n=activeSellers(kName).length;if(!n)return 0;
-  return total/n;
-}
-
-// Seller weekly goal = kiosk weekly ÷ n° active sellers
-function sellerWeekGoal(kName,monKey){
-  const total=kioskWeekGoal(kName,monKey);if(!total)return 0;
-  const n=activeSellers(kName).length;if(!n)return 0;
-  return total/n;
-}
-
-// Premiação semanal por faixa atingida
-const PRIZE_TIERS=[
-  {pct:160,label:'Ultra', prize:200},
-  {pct:140,label:'Mega',  prize:150},
-  {pct:120,label:'Super', prize:100},
-  {pct:100,label:'Meta',  prize:50},
-];
-const PRIZE_TIERS_MONTHLY=[
-  {pct:160,label:'Ultra', prize:800},
-  {pct:140,label:'Mega',  prize:600},
-  {pct:120,label:'Super', prize:400},
-  {pct:100,label:'Meta',  prize:200},
-];
-function prizeForPctMonthly(pct) {
-  for (const t of PRIZE_TIERS_MONTHLY) if (pct >= t.pct) return t;
-  return null;
-}
-function prizeForPct(pct){
-  for(const t of PRIZE_TIERS) if(pct>=t.pct) return t;
-  return null;
-}
-function prizeBadge(actual,goal){
-  if(!goal||actual<=0)return'';
-  const pct=(actual/goal)*100;
-  const tier=prizeForPct(pct);
-  if(!tier)return`<span class="gbadge miss">${floorPct(pct)}%</span>`;
-  const cls=tier.label==='Ultra'?'ultra':tier.label==='Mega'?'mega':tier.label==='Super'?'super':'hit';
-  return`<span class="gbadge ${cls}">${tier.label} · R$${tier.prize}</span>`;
-}
-
-// ══════════════════════════════════════════════════════════
-//  CSV PARSER
-// ══════════════════════════════════════════════════════════
-function parseCSVProper(text){
-  const rows=[];let cur=[],cell='',inQ=false;
-  for(let i=0;i<text.length;i++){
-    const c=text[i];
-    if(c==='"'){if(inQ&&text[i+1]==='"'){cell+='"';i++;}else inQ=!inQ;}
-    else if(c===','&&!inQ){cur.push(cell.trim());cell='';}
-    else if((c==='\n'||c==='\r')&&!inQ){
-      if(c==='\r'&&text[i+1]==='\n')i++;
-      cur.push(cell.trim());cell='';
-      if(cur.some(x=>x))rows.push(cur);cur=[];
-    }else{cell+=c;}
-  }
-  if(cell||cur.length){cur.push(cell.trim());if(cur.some(x=>x))rows.push(cur);}
-  return rows;
-}
-function brNum(s){if(!s)return 0;const f=parseFloat(s.trim().replace(/\./g,'').replace(',','.'));return isNaN(f)?0:f;}
-function brInt(s){if(!s)return 0;const i=parseInt(s.trim().replace(/\./g,'').replace(',','.'));return isNaN(i)?0:i;}
-function normDate(s){if(!s)return'';const m=s.trim().match(/^(\d{2})\/(\d{2})\/(\d{2,4})$/);if(!m)return s.trim();const[,dd,mm,yy]=m;return`${yy.length===2?'20'+yy:yy}-${mm}-${dd}`;}
-function fmtDL(s){return(!s||s.length<10)?s:s.slice(8)+'/'+s.slice(5,7);}
-
-function preview(text){
-  if(text.includes('Loja :')||text.includes('VENRES'))log('✓ Formato PDV (VENRES.RPT) detectado','ok');
-  else log('⚠ Formato não reconhecido','warn');
-  const rows=parseCSVProper(text);const ks=new Set(),ss=new Set();
-  for(const r of rows){if(r.length>12&&r[9]?.includes('Loja')){ks.add(r[10]);ss.add(r[12]);}}
-  log(`→ Quiosques: ${ks.size}  ·  Vendedores: ${ss.size}`,ks.size>0?'ok':'warn');
-  const n=(store.txnKeys||[]).length;
-  if(n)log(`→ ${n} transações já armazenadas (dedup ativo)`,'dim');
-  log('→ Clique em "Processar" para importar','dim');
-}
-
-// Rebuild store from scratch from current CSV (fixes duplicated data)
-// Does NOT touch goals — only rewrites kiosks/sellers/txnKeys/dateRange
-async function rebuildFromCSV() {
-  if (!rawCSV) { log('Carregue um arquivo CSV primeiro.', 'err'); return; }
-  if (!confirm(
-    'Reconstruir dados do zero a partir do CSV carregado?\n\n' +
-    '• Os dados de vendas serão recomputados completamente\n' +
-    '• Metas e configurações serão mantidas\n' +
-    '• Use isso para corrigir dados duplicados\n\n' +
-    'Continuar?'
-  )) return;
-
-  log('⟳ Reconstruindo do zero (ignorando dados existentes)…', 'info');
-  document.getElementById('btnProc').disabled = true;
-
-
-  const rows = parseCSVProper(rawCSV);
-  // Start FRESH — empty kiosks, sellers, txnKeys
-  const kiosks   = {};
-  const sellers  = {};
-  const seenKeys = new Set();
-  let newTxns = 0, dupInFile = 0;
-  let period = null, gtLiq = 0, gtPecas = 0;
-  const allDates = new Set();
-  const sellerTotals = {};
-
-  for (const r of rows) {
-    if (!r[9]?.includes('Loja')) continue;
-    const kName = (r[10]||'').replace(/\s+/g,' ').trim();
-    const sName = (r[12]||'').trim();
-    if (!kName || !sName) continue;
-    if (!period && r[1]) period = (r[1]||'').replace(/Período de /i,'').replace(/ Até /i,' – ').trim();
-    const _gl = brNum(r[80]), _gp = brInt(r[82]);
-    if (_gl > gtLiq) { gtLiq = _gl; gtPecas = _gp; }
-
-    const stk = kName+'||'+sName;
-    const sLiq = brNum(r[16]), sPecas = brInt(r[18]), sDias = brInt(r[34]), sDesc = brNum(r[14]);
-    if (!sellerTotals[stk] || sLiq > sellerTotals[stk].liq)
-      sellerTotals[stk] = { kName, sName, liq:sLiq, pecas:sPecas, dias:sDias, desc:sDesc };
-
-    const date   = normDate(r[56]||'');
-    const tId    = r[55]?.trim() || '';
-    const tFinal = brNum(r[60]), tPecas = brInt(r[62]), tTroca = brInt(r[63]), tBruto = brNum(r[57]);
-    const txnKey = tId || [kName,sName,date,tBruto.toFixed(2),tFinal.toFixed(2),tPecas].join('|');
-
-    // Dedup within the file itself (in case the CSV has internal duplicates)
-    if (seenKeys.has(txnKey)) { dupInFile++; continue; }
-    seenKeys.add(txnKey); newTxns++;
-    if (date) allDates.add(date);
-
-    if (!kiosks[kName]) kiosks[kName] = { name:kName, liq:0, pecas:0, trocas:0, sellers:{}, byDate:{} };
-    const K = kiosks[kName];
-    if (!K.sellers[sName]) K.sellers[sName] = { name:sName, trocas:0, byDate:{} };
-    if (date) {
-      if (!K.byDate[date]) K.byDate[date] = { liq:0, pecas:0 };
-      K.byDate[date].liq += tFinal; K.byDate[date].pecas += tPecas;
-      if (!K.sellers[sName].byDate[date]) K.sellers[sName].byDate[date] = { liq:0, pecas:0 };
-      K.sellers[sName].byDate[date].liq += tFinal; K.sellers[sName].byDate[date].pecas += tPecas;
-      K.sellers[sName].trocas += tTroca;
-    }
-  }
-
-  for (const st of Object.values(sellerTotals)) {
-    const K = kiosks[st.kName]; if (!K) continue;
-    if (!K.sellers[st.sName]) K.sellers[st.sName] = { name:st.sName, trocas:0, byDate:{} };
-    Object.assign(K.sellers[st.sName], { liq:st.liq, pecas:st.pecas, dias:st.dias, desc:st.desc });
-  }
-  for (const kn in kiosks) {
-    const K = kiosks[kn]; K.liq = K.pecas = 0;
-    for (const sn in K.sellers) { K.liq += K.sellers[sn].liq||0; K.pecas += K.sellers[sn].pecas||0; }
-    for (const sn in K.sellers) {
-      const S = K.sellers[sn];
-      if (!sellers[sn] || (S.liq||0) > (sellers[sn].liq||0)) sellers[sn] = { ...S, kiosk:kn };
-    }
-  }
-
-  const kCount = Object.keys(kiosks).length;
-  if (kCount === 0) {
-    log('✗ Nenhum quiosque encontrado.', 'err');
-    document.getElementById('btnProc').disabled = false;
-
-    return;
-  }
-
-  log(`✓ Reconstruído: ${kCount} quiosques · ${Object.keys(sellers).length} vendedores`, 'ok');
-  log(`✓ Transações únicas no CSV: ${newTxns}${dupInFile ? ` · ${dupInFile} duplicatas internas ignoradas` : ''}`, 'ok');
-  log('⟳ Salvando no Firebase…', 'info');
-
+  btn.disabled = true; btn.textContent = 'Entrando…'; err.textContent = '';
   try {
-    const newStore = {
-      period, importedAt: new Date().toLocaleString('pt-BR'),
-      gtLiq, gtPecas, kiosks, sellers,
-      txnKeys: Array.from(seenKeys),
-      dateRange: Array.from(allDates).sort()
+    await window._doLogin(rawCpf, pass);
+  } catch(e) {
+    const msgs = {
+      'auth/invalid-credential': 'CPF ou senha incorretos.',
+      'auth/user-not-found':     'CPF não cadastrado.',
+      'auth/wrong-password':     'Senha incorreta.',
+      'auth/too-many-requests':  'Muitas tentativas. Tente mais tarde.',
     };
-    await window.fbSaveStore(newStore);
-    log('✓ Dados reconstruídos e publicados!', 'ok');
-    toast('Dados reconstruídos ✓', 'ok');
-    renderGeral(); renderKiosques();
-  } catch(e) {
-    log('✗ Erro ao salvar: ' + e.message, 'err');
+    err.textContent = msgs[e.code] || 'Erro: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
   }
-  document.getElementById('btnProc').disabled = false;
-
 }
 
-async function resetStore() {
-  if (!confirm('Zerar TODOS os dados importados?\n\nIsso apagará todos os quiosques, vendedores e transações do Firebase.\nAs metas configuradas serão mantidas.\n\nEsta ação não pode ser desfeita.')) return;
-  showStatus('Zerando dados…', 'dim');
+// ── Register ─────────────────────────────────────────────
+async function doRegister() {
+  const name = document.getElementById('regName').value.trim();
+  const cpf  = document.getElementById('regCpf').value.trim();
+  const dob  = document.getElementById('regDob').value;
+  const pass = document.getElementById('regPass').value;
+  const pass2= document.getElementById('regPass2').value;
+  const role = document.getElementById('regRole').value;
+  const err  = document.getElementById('regErr');
+  const btn  = document.getElementById('btnRegSubmit');
+
+  err.textContent = '';
+  if (!name || !cpf || !dob || !pass) { err.textContent = 'Preencha todos os campos.'; return; }
+  if (!window.validateCPF(cpf))       { err.textContent = 'CPF inválido.'; return; }
+  if (pass.length < 6)                { err.textContent = 'Senha: mínimo 6 caracteres.'; return; }
+  if (pass !== pass2)                 { err.textContent = 'Senhas não coincidem.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Cadastrando…';
   try {
-    await window.fbResetStore();
-    log('✓ Dados zerados com sucesso. Reimporte o relatório.', 'ok');
-    showEmptyState();
-    toast('Dados zerados ✓', 'ok');
+    await window._doRegister({ name, cpf: cpf.replace(/\D/g,''), dob, password: pass, role });
+    // Show success message
+    document.getElementById('auth-pane-register').innerHTML = `
+      <div style="text-align:center;padding:20px 0">
+        <div style="font-size:2rem;margin-bottom:12px">✓</div>
+        <div style="font-size:1rem;margin-bottom:8px">Cadastro enviado!</div>
+        <div style="font-size:.82rem;color:var(--muted)">Aguarde a aprovação de um coordenador ou administrador.</div>
+        <button class="btn-secondary" onclick="showAuthTab('login')" style="margin-top:16px;height:36px;padding:0 16px">Voltar ao login</button>
+      </div>`;
   } catch(e) {
-    showStatus('Erro: ' + e.message, 'err');
-    log('✗ Erro ao zerar: ' + e.message, 'err');
+    const msgs = {
+      'auth/email-already-in-use': 'CPF já cadastrado.',
+      'auth/weak-password':        'Senha muito fraca.',
+    };
+    err.textContent = msgs[e.code] || 'Erro: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cadastrar';
   }
 }
 
-async function processCSV(){
-  if(!rawCSV)return;
-  if(detectCSVFormat(rawCSV)!=='analytic'){
-    log('✗ Use o relatório Analítico (VENDEDOR.RPT). Resumido não é mais aceito.','err');
+// ── Sign out ─────────────────────────────────────────────
+async function doSignOut() {
+  await window._doSignOut();
+}
+
+// ── Approval tab ─────────────────────────────────────────
+async function renderAprovacao() {
+  const el = document.getElementById('aprovacaoBody');
+  if (!el) return;
+  if (!window.canAccessTab('aprovacao')) {
+    el.innerHTML = '<div class="empty"><div class="ei">○</div><div class="et">Sem permissão</div></div>';
     return;
   }
-  return processAnalyticCSV();
-  // ── legacy summary code (unreachable, kept for reference) ──
-  log('⟳ Processando…','info');
-  document.getElementById('btnProc').disabled=true;
-  const rows=parseCSVProper(rawCSV);
-  const existingKeys=new Set(store.txnKeys||[]);
-  let newTxns=0,dupTxns=0;
-  const kiosks=JSON.parse(JSON.stringify(store.kiosks||{}));
-  const sellers=JSON.parse(JSON.stringify(store.sellers||{}));
-  let period=store.period,gtLiq=store.gtLiq||0,gtPecas=store.gtPecas||0;
-  const allDates=new Set(store.dateRange||[]);
-  const sellerTotals={};
-
-  for(const r of rows){
-    if(!r[9]?.includes('Loja'))continue;
-    const kName=(r[10]||'').replace(/\s+/g,' ').trim();
-    const sName=(r[12]||'').trim();
-    if(!kName||!sName)continue;
-    if(!period&&r[1])period=(r[1]||'').replace(/Período de /i,'').replace(/ Até /i,' – ').trim();
-    const _gl=brNum(r[80]),_gp=brInt(r[82]);
-    if(_gl>gtLiq){gtLiq=_gl;gtPecas=_gp;}
-    const stk=kName+'||'+sName;
-    const sLiq=brNum(r[16]),sPecas=brInt(r[18]),sDias=brInt(r[34]),sDesc=brNum(r[14]);
-    if(!sellerTotals[stk]||sLiq>sellerTotals[stk].liq)
-      sellerTotals[stk]={kName,sName,liq:sLiq,pecas:sPecas,dias:sDias,desc:sDesc};
-    const date=normDate(r[56]||'');
-    const tId    = r[55]?.trim() || '';  // Transaction ID (PDV sale number, col 55)
-    const tFinal = brNum(r[60]), tPecas=brInt(r[62]), tTroca=brInt(r[63]), tBruto=brNum(r[57]);
-    // Use transaction ID as dedup key — globally unique per sale (timestamp-based)
-    // Fallback to composite key if col55 is empty (shouldn't happen in practice)
-    const txnKey = tId || [kName,sName,date,tBruto.toFixed(2),tFinal.toFixed(2),tPecas].join('|');
-    if(existingKeys.has(txnKey)){dupTxns++;continue;}
-    existingKeys.add(txnKey);newTxns++;
-    if(date)allDates.add(date);
-    if(!kiosks[kName])kiosks[kName]={name:kName,liq:0,pecas:0,trocas:0,sellers:{},byDate:{}};
-    const K=kiosks[kName];
-    if(!K.sellers[sName])K.sellers[sName]={name:sName,trocas:0,byDate:{}};
-    if(date){
-      if(!K.byDate[date])K.byDate[date]={liq:0,pecas:0};
-      K.byDate[date].liq+=tFinal;K.byDate[date].pecas+=tPecas;
-      if(!K.sellers[sName].byDate[date])K.sellers[sName].byDate[date]={liq:0,pecas:0};
-      K.sellers[sName].byDate[date].liq+=tFinal;K.sellers[sName].byDate[date].pecas+=tPecas;
-      K.sellers[sName].trocas+=tTroca;
-    }
+  el.innerHTML = '<div style="color:var(--muted);padding:12px">Carregando…</div>';
+  try {
+    const users = await window.fbLoadAllUsers();
+    renderAprovacaoTable(users);
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--danger);padding:12px">Erro: ${e.message}</div>`;
   }
-  for(const st of Object.values(sellerTotals)){
-    const K=kiosks[st.kName];if(!K)continue;
-    if(!K.sellers[st.sName])K.sellers[st.sName]={name:st.sName,trocas:0,byDate:{}};
-    Object.assign(K.sellers[st.sName],{liq:st.liq,pecas:st.pecas,dias:st.dias,desc:st.desc});
+}
+
+function renderAprovacaoTable(users) {
+  const el = document.getElementById('aprovacaoBody');
+  if (!el) return;
+
+  const pending  = users.filter(u => u.status === 'pending');
+  const active   = users.filter(u => u.status === 'active');
+  const rejected = users.filter(u => u.status === 'rejected');
+
+  const statusBadge = s => ({
+    pending:  '<span class="gbadge" style="background:rgba(245,158,11,.15);color:#f59e0b">Pendente</span>',
+    active:   '<span class="gbadge hit">Ativo</span>',
+    rejected: '<span class="gbadge miss">Recusado</span>',
+  }[s] || s);
+
+  const roleOpts = Object.entries(window.ROLES||{}).map(([k,v]) =>
+    `<option value="${k}">${v.label}</option>`).join('');
+
+  const userRow = u => {
+    const isPending = u.status === 'pending';
+    const isActive  = u.status === 'active';
+    const dob = u.dob ? new Date(u.dob+'T00:00:00').toLocaleDateString('pt-BR') : '—';
+    const created = u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    return `<tr>
+      <td style="padding:9px 12px">
+        <div style="font-size:.85rem">${u.name}</div>
+        <div style="font-size:.7rem;color:var(--muted);font-family:var(--mono)">${window.formatCPF(u.cpf||'')} · nasc. ${dob}</div>
+      </td>
+      <td style="padding:9px 12px">${statusBadge(u.status)}</td>
+      <td style="padding:9px 12px">
+        <select class="geral-month-sel" style="height:30px;font-size:.75rem"
+          onchange="window.fbUpdateUserRole('${u.uid}',this.value).then(()=>renderAprovacao())"
+          ${isPending||u.status==='rejected'?'disabled':''}>
+          ${Object.entries(window.ROLES||{}).map(([k,v])=>`<option value="${k}"${u.role===k?' selected':''}>${v.label}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:9px 12px;font-size:.72rem;color:var(--muted);font-family:var(--mono)">${created}</td>
+      <td style="padding:9px 12px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${isPending ? `
+            <select id="role-sel-${u.uid}" class="geral-month-sel" style="height:28px;font-size:.72rem">
+              ${roleOpts}
+            </select>
+            <button class="btn-primary" style="height:28px;padding:0 10px;font-size:.75rem"
+              onclick="approveUser('${u.uid}')">Aprovar</button>
+            <button class="btn-secondary" style="height:28px;padding:0 10px;font-size:.75rem;color:var(--danger)"
+              onclick="rejectUser('${u.uid}')">Recusar</button>
+          ` : ''}
+          ${isActive ? `
+            <button class="btn-secondary" style="height:28px;padding:0 10px;font-size:.75rem;color:var(--danger)"
+              onclick="rejectUser('${u.uid}')">Revogar</button>
+          ` : ''}
+          ${u.status==='rejected' ? `
+            <select id="role-sel-${u.uid}" class="geral-month-sel" style="height:28px;font-size:.72rem">
+              ${roleOpts}
+            </select>
+            <button class="btn-primary" style="height:28px;padding:0 10px;font-size:.75rem"
+              onclick="approveUser('${u.uid}')">Reativar</button>
+          ` : ''}
+        </div>
+      </td>
+    </tr>`;
+  };
+
+  let h = '';
+
+  if (pending.length) {
+    h += `<div class="h2" style="color:#f59e0b">Aguardando aprovação (${pending.length})</div>
+    <div class="tw tw-scroll" style="margin-bottom:20px"><table>
+      <thead><tr>
+        <th>Usuário</th><th>Status</th><th>Perfil</th><th>Cadastro</th><th>Ação</th>
+      </tr></thead>
+      <tbody>${pending.map(userRow).join('')}</tbody>
+    </table></div>`;
   }
-  for(const kn in kiosks){
-    const K=kiosks[kn];K.liq=K.pecas=0;
-    for(const sn in K.sellers){K.liq+=K.sellers[sn].liq||0;K.pecas+=K.sellers[sn].pecas||0;}
-    for(const sn in K.sellers){
-      const S=K.sellers[sn];
-      if(!sellers[sn]||(S.liq||0)>(sellers[sn].liq||0))sellers[sn]={...S,kiosk:kn};
-    }
+
+  h += `<div class="h2">Usuários ativos (${active.length})</div>
+  <div class="tw tw-scroll" style="margin-bottom:20px"><table>
+    <thead><tr><th>Usuário</th><th>Status</th><th>Perfil</th><th>Cadastro</th><th>Ação</th></tr></thead>
+    <tbody>${active.length ? active.map(userRow).join('') : '<tr><td colspan="5" style="color:var(--muted);padding:12px">Nenhum usuário ativo</td></tr>'}</tbody>
+  </table></div>`;
+
+  if (rejected.length) {
+    h += `<div class="h2" style="color:var(--muted)">Recusados (${rejected.length})</div>
+    <div class="tw tw-scroll"><table>
+      <thead><tr><th>Usuário</th><th>Status</th><th>Perfil</th><th>Cadastro</th><th>Ação</th></tr></thead>
+      <tbody>${rejected.map(userRow).join('')}</tbody>
+    </table></div>`;
   }
-  const kCount=Object.keys(kiosks).length;
-  if(kCount===0){log('✗ Nenhum quiosque encontrado. Verifique o arquivo.','err');document.getElementById('btnProc').disabled=false;return;}
 
-  const newStore={period,importedAt:new Date().toLocaleString('pt-BR'),
-    gtLiq,gtPecas,kiosks,sellers,txnKeys:Array.from(existingKeys),
-    dateRange:Array.from(allDates).sort()};
-
-  log(`✓ ${kCount} quiosques · ${Object.keys(sellers).length} vendedores`,'ok');
-  log(`✓ Novas: ${newTxns}  ·  Duplicatas ignoradas: ${dupTxns}`,dupTxns>0?'warn':'ok');
-  log('⟳ Salvando no Firebase…','info');
-  try{
-    await window.fbSaveStore(newStore);
-    log('✓ Publicado!','ok');
-    toast('Dados publicados ✓');
-  }catch(e){log('✗ Erro: '+e.message,'err');}
-  document.getElementById('btnProc').disabled=false;
+  el.innerHTML = h || '<div style="color:var(--muted);padding:12px">Nenhum usuário cadastrado.</div>';
 }
 
-// ══════════════════════════════════════════════════════════
-//  RENDER GERAL
-// ══════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════
-//  RENDER GERAL (público — foco em metas, sem valores totais)
-// ══════════════════════════════════════════════════════════
-
-// Period selector state: 'month' | week monKey (YYYY-MM-DD)
-// ── Month filter helpers ─────────────────────────────────
-// Sum liq for a kiosk for all dates in a given YYYY-MM
-function kMonthLiq(kName, monthKey) {
-  const K = store.kiosks[kName]; if (!K) return 0;
-  return Object.entries(K.byDate || {})
-    .filter(([d]) => d.slice(0,7) === monthKey)
-    .reduce((s,[,v]) => s + (v.liq||0), 0);
-}
-// Sum liq for a seller for dates in YYYY-MM
-function sMonthLiq(kName, sName, monthKey) {
-  const S = store.kiosks[kName]?.sellers?.[sName]; if (!S) return 0;
-  return Object.entries(S.byDate || {})
-    .filter(([d]) => d.slice(0,7) === monthKey)
-    .reduce((s,[,v]) => s + (v.liq||0), 0);
-}
-// Pecas for kiosk in a month
-function kMonthPecas(kName, monthKey) {
-  const K = store.kiosks[kName]; if (!K) return 0;
-  return Object.entries(K.byDate || {})
-    .filter(([d]) => d.slice(0,7) === monthKey)
-    .reduce((s,[,v]) => s + (v.pecas||0), 0);
-}
-// Pecas for seller in a month
-function sMonthPecas(kName, sName, monthKey) {
-  const S = store.kiosks[kName]?.sellers?.[sName]; if (!S) return 0;
-  return Object.entries(S.byDate || {})
-    .filter(([d]) => d.slice(0,7) === monthKey)
-    .reduce((s,[,v]) => s + (v.pecas||0), 0);
+async function approveUser(uid) {
+  const sel  = document.getElementById('role-sel-'+uid);
+  const role = sel?.value || 'vendedor';
+  try {
+    await window.fbApproveUser(uid, role);
+    toast('Usuário aprovado ✓', 'ok');
+    renderAprovacao();
+  } catch(e) { toast('Erro: '+e.message, 'err'); }
 }
 
-// ── Month filter state ───────────────────────────────────
-let geralMonth = null;  // YYYY-MM, null = auto (last data month)
-
-function getGeralMonth() {
-  if (geralMonth) return geralMonth;
-  const dates = store.dateRange || [];
-  return dates.length ? dates[dates.length-1].slice(0,7) : '';
+async function rejectUser(uid) {
+  try {
+    await window.fbRejectUser(uid);
+    toast('Acesso revogado', 'ok');
+    renderAprovacao();
+  } catch(e) { toast('Erro: '+e.message, 'err'); }
 }
 
-function setGeralMonth(ym) {
-  geralMonth = ym;
-  renderGeral();
-}
-
-// ── Toggle weekly expansion per kiosk ───────────────────
-const _geralExpanded = new Set();  // set of kiosk names with weeks open
-
-function toggleGeralWeeks(kName) {
-  if (_geralExpanded.has(kName)) _geralExpanded.delete(kName);
-  else _geralExpanded.add(kName);
-  renderGeral();
-}
-
-// ══════════════════════════════════════════════════════════
-//  RENDER GERAL
-// ══════════════════════════════════════════════════════════
-// ── Daily goal helpers ──────────────────────────────
-function kioskDailyGoal(kName, dateKey) {
-  return goals.kiosks[kName]?.dailyByDate?.[dateKey] || 0;
-}
-// Sum daily goals for a month
-function kioskMonthGoalFromDaily(kName, monthKey) {
-  const db = goals.kiosks[kName]?.dailyByDate||{};
-  return Object.entries(db)
-    .filter(([d]) => d.slice(0,7) === monthKey)
-    .reduce((s,[,v]) => s+v, 0);
-}
-// Sum daily goals for a week (Mon–Sun)
-function kioskWeekGoalFromDaily(kName, monday, sunday) {
-  const db = goals.kiosks[kName]?.dailyByDate||{};
-  return Object.entries(db)
-    .filter(([d]) => { const dt=new Date(d+'T00:00:00'); return dt>=monday&&dt<=sunday; })
-    .reduce((s,[,v]) => s+v, 0);
-}
-function todayKey() {
-  return new Date().toISOString().slice(0,10);
-}
-function yesterdayKey() {
-  const d = new Date(); d.setDate(d.getDate()-1);
-  return d.toISOString().slice(0,10);
-}
-function kioskDayLiq(kName, dateKey) {
-  return (store.kiosks[kName]?.byDate?.[dateKey]?.liq) || 0;
-}
-function dailyPrizeBadge(pct) {
-  if (pct >= 160) return {label:'Ultra', cls:'ultra'};
-  if (pct >= 140) return {label:'Mega',  cls:'mega'};
-  if (pct >= 120) return {label:'Super', cls:'super'};
-  if (pct >= 100) return {label:'Meta',  cls:'hit'};
-  return null;
-}
-function fmtDateBR(dateKey) {
-  if (!dateKey) return '';
-  const [y,m,d] = dateKey.split('-');
-  return d+'/'+m;
-}
 
 // ── Painel Geral — estado ──
 let geralPeriod = null;  // YYYY-MM
@@ -3146,141 +3006,314 @@ let _pendingStockImport = null;  // parsed rows before save
 
 function loadStockFile(evt) {
   const file = evt.target.files[0]; if (!file) return;
-  const ext = file.name.split('.').pop().toLowerCase();
+  const ext  = file.name.split('.').pop().toLowerCase();
   const reader = new FileReader();
 
   reader.onload = e => {
     let rows = [];
     if (ext === 'xlsx' || ext === 'xls') {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const wb = XLSX.read(e.target.result, { type:'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+      rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' })
         .filter(r => r.some(c => String(c).trim()));
     } else {
-      // CSV
-      rows = e.target.result.split(/\r?\n/)
+      // CSV — try latin-1 / UTF-8
+      let text = e.target.result;
+      rows = text.split(/\r?\n/)
         .filter(l => l.trim())
-        .map(l => l.split(/[,;\t]/).map(c => c.trim().replace(/^"|"$/g, '')));
+        .map(l => l.split(/;|,|\t/).map(c => c.trim().replace(/^"|"$/g,'')));
     }
-    parseStockImport(rows);
+    parseStockImport(rows, file.name);
   };
 
   if (ext === 'xlsx' || ext === 'xls') reader.readAsArrayBuffer(file);
-  else reader.readAsText(file, 'UTF-8');
+  else reader.readAsText(file, 'latin-1');  // default latin-1 for PDV exports
 }
 
-function parseStockImport(rows) {
-  if (!rows.length) { showStockImportError('Arquivo vazio.'); return; }
-
-  // Detect header row — look for SKU, Quantidade, Quiosque columns
-  let headerRow = -1, colSku = -1, colQty = -1, colKiosk = -1;
-  for (let i = 0; i < Math.min(5, rows.length); i++) {
-    const r = rows[i].map(c => String(c).toLowerCase().trim());
-    const si = r.findIndex(c => c.includes('sku') || c === 'cod' || c === 'código');
-    const qi = r.findIndex(c => c.includes('quant') || c === 'qty' || c === 'estoque' || c === 'un' || c === 'un.');
-    const ki = r.findIndex(c => c.includes('quiosque') || c.includes('loja') || c.includes('kiosk') || c.includes('unidade'));
-    if (si >= 0 && qi >= 0) {
-      headerRow = i; colSku = si; colQty = qi; colKiosk = ki;
-      break;
+// ── Detect file format ──────────────────────────────────
+function detectStockFormat(rows) {
+  // Format A: PDV Contagem (Contada/Estoque header, semicolons, col[1]=SKU, col[8]=Contada)
+  if (rows[0] && String(rows[0][0]).includes('Contada')) return 'pdv';
+  // Check row[1] for 'Contagem' keyword
+  for (let i = 0; i < 3; i++) {
+    const r = rows[i]||[];
+    if (r.some(c => String(c).toLowerCase().includes('contagem'))) return 'pdv';
+  }
+  // Format B: generic (header row with SKU, Quantidade, Quiosque)
+  for (let i = 0; i < 5; i++) {
+    const r = (rows[i]||[]).map(c => String(c).toLowerCase());
+    if (r.some(c => c.includes('sku') || c === 'cod') &&
+        r.some(c => c.includes('quant') || c === 'qty' || c === 'estoque')) {
+      return 'generic';
     }
   }
-  if (headerRow < 0) {
-    // Fallback: assume cols 0=SKU, 1=Qty, 2=Kiosk
-    headerRow = rows[0].some(c => /[a-zA-Z]{2,}/.test(String(c))) ? 0 : -1;
-    colSku = 0; colQty = 1; colKiosk = 2;
-  }
-
-  const dataStart = headerRow >= 0 ? headerRow + 1 : 0;
-  const parsed = [];
-  const errors = [];
-
-  for (let i = dataStart; i < rows.length; i++) {
-    const r = rows[i];
-    const sku   = String(r[colSku]||'').trim();
-    const qtyRaw= String(r[colQty]||'').trim().replace(',','.');
-    const kRaw  = colKiosk >= 0 ? String(r[colKiosk]||'').trim() : '';
-    if (!sku) continue;
-
-    const qty = parseFloat(qtyRaw);
-    if (isNaN(qty) || qty < 0) { errors.push(`Linha ${i+1}: quantidade inválida "${qtyRaw}"`); continue; }
-
-    // Fuzzy match kiosk
-    const kMatch = kRaw
-      ? Object.keys(store.kiosks).find(k =>
-          k.toLowerCase().includes(kRaw.toLowerCase()) ||
-          kRaw.toLowerCase().includes(sK(k).toLowerCase()) ||
-          sK(k).toLowerCase().includes(kRaw.toLowerCase())
-        ) || kRaw
-      : null;
-
-    parsed.push({ sku, qty: Math.round(qty), kiosk: kMatch, rawKiosk: kRaw });
-  }
-
-  if (!parsed.length) { showStockImportError('Nenhuma linha válida. Verifique as colunas: SKU | Quantidade | Quiosque'); return; }
-
-  _pendingStockImport = parsed;
-  renderStockImportPreview(parsed, errors);
+  return 'generic';
 }
 
-function renderStockImportPreview(rows, errors) {
+// ── Main parser ─────────────────────────────────────────
+function parseStockImport(rows, filename) {
+  if (!rows.length) { showStockImportError('Arquivo vazio.'); return; }
+
+  const fmt = detectStockFormat(rows);
+
+  if (fmt === 'pdv') {
+    parsePdvContagem(rows, filename);
+  } else {
+    parseGenericStock(rows, filename);
+  }
+}
+
+// ── PDV Contagem format ─────────────────────────────────
+// Row 0: Contada/Estoque header
+// Row 2: col[4]=date, col[6]=kiosk, col[7]=responsible
+// Row 5: column labels (col[9]=Contada, col[10]=Estoque)
+// Data rows: col[1]=SKU, col[2]=desc, col[8]=Contada, col[10]=Estoque sistema
+function parsePdvContagem(rows, filename) {
+  // Extract header metadata
+  const h2    = rows[2]||[];
+  const rawDate  = String(h2[4]||'').trim();  // DD/MM/YYYY
+  const rawKiosk = String(h2[6]||'').trim();
+  const resp     = String(h2[7]||'').trim();
+
+  // Parse date → YYYY-MM-DD
+  let isoDate = new Date().toISOString().slice(0,10);
+  const dm = rawDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dm) isoDate = `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`;
+
+  // Fuzzy match kiosk
+  const kMatch = Object.keys(store.kiosks).find(k =>
+    k.toLowerCase().includes(rawKiosk.toLowerCase().slice(0,10)) ||
+    rawKiosk.toLowerCase().includes(sK(k).toLowerCase())
+  ) || rawKiosk;
+
+  // Build description → analytic SKU lookup map
+  const descToAnalyticSku = {};
+  const skusData = window._analytics?.skus||{};
+  Object.entries(skusData).forEach(([sku, s]) => {
+    descToAnalyticSku[s.desc.toLowerCase().trim()] = sku;
+  });
+
+  // Parse data rows
+  const parsed = [];
+  const unmatched = [];
+
+  for (let i = 6; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || r.length < 9) continue;
+    const rawSku  = String(r[1]||'').trim();
+    const rawDesc = String(r[2]||'').trim();
+    const contadaRaw = String(r[8]||'').trim();
+    const estoqueRaw = String(r[10]||'').trim();
+    if (!rawSku && !rawDesc) continue;
+
+    const contada = contadaRaw !== '' ? parseInt(contadaRaw) : null;
+    const estoqueAnt = estoqueRaw !== '' ? parseInt(estoqueRaw) : null;
+    if (contada === null && estoqueAnt === null) continue;
+    if (isNaN(contada) && isNaN(estoqueAnt)) continue;
+
+    // Try to match to analytic SKU by description
+    const descNorm = rawDesc.toLowerCase().trim();
+    let analyticSku = descToAnalyticSku[descNorm];
+    // Fuzzy: partial match
+    if (!analyticSku) {
+      analyticSku = Object.entries(descToAnalyticSku).find(([d]) =>
+        d.includes(descNorm.slice(0,20)) || descNorm.includes(d.slice(0,20))
+      )?.[1];
+    }
+    // Also try stripping description padding
+    if (!analyticSku) {
+      const descTrimmed = rawDesc.replace(/\s{2,}/g,' ').trim().toLowerCase();
+      analyticSku = Object.entries(descToAnalyticSku).find(([d]) =>
+        d.replace(/\s{2,}/g,' ').startsWith(descTrimmed.slice(0,25)) ||
+        descTrimmed.startsWith(d.slice(0,25))
+      )?.[1];
+    }
+
+    const row = {
+      pdvSku:    rawSku,
+      desc:      rawDesc.replace(/\s{2,}/g,' '),
+      contada:   isNaN(contada) ? null : contada,
+      estoqueAnt: isNaN(estoqueAnt) ? null : estoqueAnt,
+      kiosk:     kMatch,
+      analyticSku,
+      matched:   !!analyticSku,
+    };
+
+    parsed.push(row);
+    if (!analyticSku) unmatched.push(row);
+  }
+
+  if (!parsed.length) { showStockImportError('Nenhuma linha de produto encontrada.'); return; }
+
+  _pendingStockImport = parsed;
+  _stockImportMeta = { kiosk: kMatch, date: isoDate, responsible: resp, format: 'pdv', filename };
+  renderPdvImportPreview(parsed, unmatched, kMatch, isoDate, resp);
+}
+
+// ── Generic format ──────────────────────────────────────
+function parseGenericStock(rows, filename) {
+  // Find header
+  let headerRow=-1, colSku=0, colQty=1, colKiosk=2;
+  for (let i=0; i<Math.min(5,rows.length); i++) {
+    const r = rows[i].map(c => String(c).toLowerCase().trim());
+    const si = r.findIndex(c => c.includes('sku')||c==='cod'||c==='código');
+    const qi = r.findIndex(c => c.includes('quant')||c==='qty'||c==='estoque'||c.includes('contad'));
+    const ki = r.findIndex(c => c.includes('quiosque')||c.includes('loja')||c.includes('kiosk'));
+    if (si>=0 && qi>=0) { headerRow=i; colSku=si; colQty=qi; colKiosk=ki; break; }
+  }
+  const dataStart = headerRow>=0 ? headerRow+1 : 0;
+  const parsed=[], errors=[];
+  for (let i=dataStart; i<rows.length; i++) {
+    const r = rows[i];
+    const sku  = String(r[colSku]||'').trim();
+    const qty  = parseFloat(String(r[colQty]||'').replace(',','.'));
+    const kRaw = colKiosk>=0 ? String(r[colKiosk]||'').trim() : '';
+    if (!sku) continue;
+    if (isNaN(qty)) { errors.push(`Linha ${i+1}: quantidade inválida`); continue; }
+    const kMatch = kRaw ? (Object.keys(store.kiosks).find(k =>
+      k.toLowerCase().includes(kRaw.toLowerCase()) ||
+      kRaw.toLowerCase().includes(sK(k).toLowerCase())
+    ) || kRaw) : null;
+    parsed.push({ pdvSku: sku, desc: sku, contada: Math.round(qty), kiosk: kMatch, analyticSku: sku, matched: true });
+  }
+  if (!parsed.length) { showStockImportError('Nenhuma linha válida encontrada.'); return; }
+  _pendingStockImport = parsed;
+  _stockImportMeta = { kiosk: null, date: new Date().toISOString().slice(0,10), format:'generic', filename };
+  renderPdvImportPreview(parsed, [], null, _stockImportMeta.date, '');
+}
+
+// ── Preview UI ──────────────────────────────────────────
+let _stockImportMeta = null;
+let _stockImportSelection = null;  // Set of pdvSkus to import, null = all
+
+function renderPdvImportPreview(rows, unmatched, kiosk, isoDate, responsible) {
   const el = document.getElementById('stockImportPreview');
   if (!el) return;
 
-  // Group by kiosk for summary
-  const byKiosk = {};
-  rows.forEach(r => {
-    const k = r.kiosk || '(sem quiosque)';
-    if (!byKiosk[k]) byKiosk[k] = { skus: 0, total: 0 };
-    byKiosk[k].skus++;
-    byKiosk[k].total += r.qty;
-  });
+  const matched   = rows.filter(r => r.matched);
+  const isoDateTime = isoDate + 'T' + new Date().toTimeString().slice(0,5);
 
-  const ks = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
-  const now = new Date().toISOString().slice(0,16);
+  let h = `<div class="stock-preview">
+    <div class="stock-preview-head">
+      <div>
+        <div style="font-size:.85rem;font-weight:600;margin-bottom:4px">
+          ${kiosk ? sK(kiosk) : 'Quiosque não identificado'}
+          ${responsible ? `<span style="color:var(--muted);font-weight:400;margin-left:8px;font-size:.78rem">· ${responsible}</span>` : ''}
+        </div>
+        <div style="font-size:.75rem;color:var(--muted)">
+          ${rows.length} produtos · ${matched.length} vinculados ao analítico
+          ${unmatched.length ? `· <span style="color:#f59e0b">${unmatched.length} sem correspondência</span>` : ''}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="font-size:.75rem;color:var(--muted);white-space:nowrap">Data da contagem</label>
+        <input type="datetime-local" id="pdvCountDate" value="${isoDateTime}"
+          style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.78rem;padding:3px 8px;height:30px">
+      </div>
+    </div>`;
 
-  let h = `<div class="stock-import-summary">
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:12px">
-      ${rows.length} SKUs importados${errors.length?` · <span style="color:var(--danger)">${errors.length} erros</span>`:''}
+  // Mode selector
+  h += `<div class="stock-preview-modes">
+    <label class="stock-mode-opt">
+      <input type="radio" name="importMode" value="all" checked onchange="setStockImportMode('all')">
+      <span>Sobrescrever todos (${rows.length} produtos)</span>
+    </label>
+    <label class="stock-mode-opt">
+      <input type="radio" name="importMode" value="select" onchange="setStockImportMode('select')">
+      <span>Selecionar produtos manualmente</span>
+    </label>
+  </div>`;
+
+  // Product table
+  h += `<div class="stock-preview-table-wrap">
+    <div id="stockSelToolbar" style="display:none;padding:8px 0 6px;display:none">
+      <button class="btn-secondary" onclick="selectAllStock(true)" style="height:28px;padding:0 10px;font-size:.75rem">Todos</button>
+      <button class="btn-secondary" onclick="selectAllStock(false)" style="height:28px;padding:0 10px;font-size:.75rem;margin-left:4px">Nenhum</button>
+      <span id="stockSelCount" style="font-size:.75rem;color:var(--muted);margin-left:8px"></span>
     </div>
-    <table style="width:100%;font-size:.8rem;border-collapse:collapse">
+    <div class="tw tw-scroll" style="max-height:340px;overflow-y:auto">
+    <table style="width:100%;font-size:.78rem;border-collapse:collapse">
       <thead><tr>
-        <th style="text-align:left;color:var(--muted);font-size:.65rem;padding:4px 8px;border-bottom:1px solid var(--border)">Quiosque</th>
-        <th class="num" style="color:var(--muted);font-size:.65rem;padding:4px 8px;border-bottom:1px solid var(--border)">SKUs</th>
-        <th class="num" style="color:var(--muted);font-size:.65rem;padding:4px 8px;border-bottom:1px solid var(--border)">Total Un.</th>
-        <th style="color:var(--muted);font-size:.65rem;padding:4px 8px;border-bottom:1px solid var(--border)">Data e hora da contagem</th>
+        <th id="stockChkHeader" style="width:32px;display:none;padding:6px 8px;border-bottom:1px solid var(--border)"></th>
+        <th style="text-align:left;color:var(--muted);font-size:.62rem;letter-spacing:.07em;padding:6px 8px;border-bottom:1px solid var(--border)">PRODUTO</th>
+        <th class="num" style="color:var(--muted);font-size:.62rem;letter-spacing:.07em;padding:6px 8px;border-bottom:1px solid var(--border)">CONTADA</th>
+        <th class="num" style="color:var(--muted);font-size:.62rem;letter-spacing:.07em;padding:6px 8px;border-bottom:1px solid var(--border)">SISTEMA</th>
+        <th class="num" style="color:var(--muted);font-size:.62rem;letter-spacing:.07em;padding:6px 8px;border-bottom:1px solid var(--border)">DIF.</th>
+        <th style="color:var(--muted);font-size:.62rem;letter-spacing:.07em;padding:6px 8px;border-bottom:1px solid var(--border)">SKU ANALÍTICO</th>
       </tr></thead><tbody>`;
 
-  Object.entries(byKiosk).forEach(([k, v]) => {
-    const kioskId = k.replace(/[^a-zA-Z0-9]/g,'_');
-    const kDisplay = k === '(sem quiosque)' ? k : sK(k);
-    h += `<tr>
-      <td style="padding:6px 8px"><strong>${kDisplay}</strong></td>
-      <td class="num" style="padding:6px 8px;font-family:var(--mono)">${v.skus}</td>
-      <td class="num" style="padding:6px 8px;font-family:var(--mono)">${v.total}</td>
-      <td style="padding:6px 8px">
-        <input type="datetime-local" id="countdate-${kioskId}"
-          value="${now}"
-          style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.78rem;padding:3px 8px;height:28px">
+  rows.forEach((r, idx) => {
+    const diff = (r.contada !== null && r.estoqueAnt !== null) ? r.contada - r.estoqueAnt : null;
+    const diffColor = diff === null ? '' : diff > 0 ? 'color:var(--success)' : diff < 0 ? 'color:var(--danger)' : 'color:var(--muted)';
+    const noMatch = !r.matched;
+    h += `<tr style="${noMatch?'opacity:.5':''}">
+      <td id="chk-cell-${idx}" class="stock-chk-cell" style="display:none;padding:5px 8px;text-align:center">
+        <input type="checkbox" class="stock-row-chk" data-idx="${idx}" checked
+          onchange="updateStockSelection()">
+      </td>
+      <td style="padding:5px 8px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
+      <td class="num" style="padding:5px 8px;font-family:var(--mono);font-weight:600">${r.contada ?? '—'}</td>
+      <td class="num" style="padding:5px 8px;font-family:var(--mono);color:var(--muted)">${r.estoqueAnt ?? '—'}</td>
+      <td class="num" style="padding:5px 8px;font-family:var(--mono);${diffColor}">${diff !== null ? (diff>0?'+':'')+diff : '—'}</td>
+      <td style="padding:5px 8px;font-family:var(--mono);font-size:.7rem;color:${noMatch?'var(--danger)':'var(--muted)'}">
+        ${r.analyticSku || '<em>sem vínculo</em>'}
       </td>
     </tr>`;
   });
 
-  h += `</tbody></table>`;
-  if (errors.length) {
-    h += `<div style="margin-top:8px;font-size:.72rem;color:var(--danger)">${errors.slice(0,5).join('<br>')}</div>`;
-  }
-  h += `<div style="margin-top:12px;display:flex;gap:8px">
-    <button class="btn-primary" onclick="saveStockImport()" style="height:34px;padding:0 16px;font-size:.8rem">
+  h += `</tbody></table></div></div>`;
+
+  // Actions
+  h += `<div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap">
+    <button class="btn-primary" id="btnConfirmStockImport" onclick="saveStockImport()"
+      style="height:34px;padding:0 16px;font-size:.8rem">
       Salvar contagem
     </button>
-    <button class="btn-secondary" onclick="cancelStockImport()" style="height:34px;padding:0 16px;font-size:.8rem">
-      Cancelar
-    </button>
+    <button class="btn-secondary" onclick="cancelStockImport()"
+      style="height:34px;padding:0 16px;font-size:.8rem">Cancelar</button>
+    <span style="font-size:.72rem;color:var(--muted)" id="stockImportNote"></span>
   </div></div>`;
 
   el.innerHTML = h;
   el.style.display = 'block';
-  document.getElementById('btnSaveStock').style.display = 'none';
+  _stockImportSelection = null;  // null = all
+  updateStockImportNote();
+}
+
+function setStockImportMode(mode) {
+  const chkCells   = document.querySelectorAll('.stock-chk-cell');
+  const chkHeader  = document.getElementById('stockChkHeader');
+  const selToolbar = document.getElementById('stockSelToolbar');
+  const show = mode === 'select';
+  chkCells.forEach(c => c.style.display = show ? 'table-cell' : 'none');
+  if (chkHeader) chkHeader.style.display = show ? 'table-cell' : 'none';
+  if (selToolbar) selToolbar.style.display = show ? 'flex' : 'none';
+  if (!show) {
+    _stockImportSelection = null;
+    document.querySelectorAll('.stock-row-chk').forEach(c => c.checked = true);
+  }
+  updateStockImportNote();
+}
+
+function selectAllStock(checked) {
+  document.querySelectorAll('.stock-row-chk').forEach(c => c.checked = checked);
+  updateStockSelection();
+}
+
+function updateStockSelection() {
+  const checked = [...document.querySelectorAll('.stock-row-chk:checked')].map(c => parseInt(c.dataset.idx));
+  _stockImportSelection = checked;
+  const ct = document.getElementById('stockSelCount');
+  if (ct) ct.textContent = `${checked.length} selecionados`;
+  updateStockImportNote();
+}
+
+function updateStockImportNote() {
+  const note = document.getElementById('stockImportNote');
+  if (!note || !_pendingStockImport) return;
+  const total  = _pendingStockImport.length;
+  const active = _stockImportSelection ? _stockImportSelection.length : total;
+  note.textContent = `${active} de ${total} produtos serão salvos`;
 }
 
 function showStockImportError(msg) {
@@ -3291,47 +3324,47 @@ function showStockImportError(msg) {
 async function saveStockImport() {
   if (!_pendingStockImport?.length) return;
 
+  const dtInput = document.getElementById('pdvCountDate');
+  const dt = dtInput?.value || new Date().toISOString().slice(0,16);
+
+  // Determine which rows to save
+  const rowsToSave = _stockImportSelection !== null
+    ? _stockImportSelection.map(i => _pendingStockImport[i]).filter(Boolean)
+    : _pendingStockImport;
+
+  if (!rowsToSave.length) { showStockImportError('Nenhum produto selecionado.'); return; }
+
   const inv = getInventory();
-  if (!inv.stock) inv.stock = {};
+  if (!inv.stock)      inv.stock      = {};
   if (!inv.countDates) inv.countDates = {};
 
-  // Group by kiosk, apply datetime
-  const byKiosk = {};
-  _pendingStockImport.forEach(r => {
-    const k = r.kiosk || '';
-    if (!byKiosk[k]) byKiosk[k] = [];
-    byKiosk[k].push(r);
+  const kiosk = _stockImportMeta?.kiosk || '';
+  if (kiosk) inv.countDates[kiosk] = dt;
+
+  let saved = 0;
+  rowsToSave.forEach(r => {
+    // Use analyticSku if available, else fall back to pdvSku
+    const skuKey = r.analyticSku || r.pdvSku;
+    if (!skuKey || r.contada === null) return;
+    if (!inv.stock[skuKey]) inv.stock[skuKey] = {};
+    if (!inv.stock[skuKey][kiosk]) inv.stock[skuKey][kiosk] = {};
+    inv.stock[skuKey][kiosk].atual      = r.contada;
+    inv.stock[skuKey][kiosk].countDate  = dt;
+    saved++;
   });
 
-  Object.entries(byKiosk).forEach(([kn, rows]) => {
-    // Read datetime from input
-    const kioskId = kn.replace(/[^a-zA-Z0-9]/g,'_');
-    const dtInput = document.getElementById(`countdate-${kioskId}`);
-    const dt = dtInput?.value || new Date().toISOString().slice(0,16);
-
-    // Store count date per kiosk
-    inv.countDates[kn] = dt;
-
-    // Merge stock levels
-    rows.forEach(r => {
-      if (!inv.stock[r.sku]) inv.stock[r.sku] = {};
-      if (!inv.stock[r.sku][kn]) inv.stock[r.sku][kn] = {};
-      inv.stock[r.sku][kn].atual = r.qty;
-      inv.stock[r.sku][kn].countDate = dt;
-    });
-  });
-
-  // Save to goals
-  if (!goals.inventory) goals.inventory = { targetDays: estoqueTargetDays, stock: {}, countDates: {} };
-  goals.inventory.stock     = inv.stock;
-  goals.inventory.countDates= inv.countDates;
+  if (!goals.inventory) goals.inventory = { targetDays: estoqueTargetDays, stock:{}, countDates:{} };
+  goals.inventory.stock      = inv.stock;
+  goals.inventory.countDates = inv.countDates;
 
   try {
     await saveAllGoals();
-    toast(`Estoque de ${_pendingStockImport.length} SKUs salvo ✓`, 'ok');
+    toast(`${saved} SKUs salvos · ${sK(kiosk)||'quiosque'} · ${dt.slice(0,10)}`, 'ok');
     _pendingStockImport = null;
+    _stockImportMeta = null;
+    _stockImportSelection = null;
     const el = document.getElementById('stockImportPreview');
-    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+    if (el) { el.style.display='none'; el.innerHTML=''; }
     renderEstoque();
   } catch(e) {
     showStockImportError('Erro ao salvar: ' + e.message);
@@ -3340,9 +3373,12 @@ async function saveStockImport() {
 
 function cancelStockImport() {
   _pendingStockImport = null;
+  _stockImportMeta = null;
+  _stockImportSelection = null;
   const el = document.getElementById('stockImportPreview');
-  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+  if (el) { el.style.display='none'; el.innerHTML=''; }
 }
+
 
 // ══════════════════════════════════════════════════════════
 //  ESTOQUE MODULE — Gestão de Reposição
