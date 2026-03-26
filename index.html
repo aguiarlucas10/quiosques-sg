@@ -48,6 +48,16 @@ const REF_GOALS = doc(db, 'app', 'goals');
 window.fbSaveStore = async function(data) {
   await setDoc(REF_STORE, data);
 };
+const REF_ANALYTICS = doc(db, 'app', 'analytics');
+window.fbSaveAnalytics = async function(data) {
+  await setDoc(REF_ANALYTICS, data);
+};
+// Load analytics on startup
+window._analytics = { skus:{}, transactions:{} };
+onSnapshot(REF_ANALYTICS, snap => {
+  window._analytics = snap.exists() ? snap.data() : { skus:{}, transactions:{} };
+  if (document.getElementById('pnl-estoque')?.classList.contains('on')) window.renderEstoque?.();
+}, err => console.warn('analytics:', err));
 window.fbResetStore = async function() {
   const empty = { period:null, importedAt:null, gtLiq:0, gtPecas:0,
                   kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
@@ -491,6 +501,50 @@ tr.inactive td{opacity:.35}
 .day-panel-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:22px}
 .day-panel-pct{font-family:var(--mono);font-size:.78rem}
 /* Responsive: 2 cols on mobile */
+/* ── SKU TABLE ── */
+.sku-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.sku-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.sku-table th{text-align:left;color:var(--muted);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap}
+.sku-table td{padding:9px 14px;border-bottom:1px solid rgba(42,42,42,.4)}
+.sku-row{transition:background .12s}
+.sku-row:hover{background:var(--surface2)}
+.sku-row:last-child td{border-bottom:none}
+.sku-code{font-family:var(--mono);font-size:.78rem;white-space:nowrap;color:var(--muted)}
+.sku-desc{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* SKU detail row */
+.sku-detail-row td{padding:0}
+.sku-detail-cell{background:rgba(255,255,255,.02);border-bottom:1px solid var(--border)!important}
+.sku-detail-inner{padding:14px 18px}
+.sku-breakdown-title{font-size:.8rem;color:var(--muted);margin-bottom:10px}
+.sku-breakdown-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.sku-bk-item{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px}
+.sku-bk-name{font-size:.72rem;letter-spacing:.05em;color:var(--text);margin-bottom:6px}
+.sku-bk-nums{display:flex;flex-wrap:wrap;gap:6px;font-family:var(--mono);font-size:.75rem;color:var(--muted)}
+.sku-bk-nums .mo{color:var(--text)}
+/* Pagination */
+.sku-pagination{display:flex;gap:6px;padding:12px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.sku-page-btn{padding:4px 12px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-family:var(--mono);font-size:.72rem;cursor:pointer;transition:all .12s}
+.sku-page-btn:hover{border-color:#555;color:var(--text)}
+.sku-page-btn.on{background:#fff;border-color:#fff;color:#000}
+/* Clickable kiosk rows */
+.sku-kiosk-row{cursor:pointer}
+.sku-kiosk-row:hover td{background:rgba(255,255,255,.04)}
+.sku-kiosk-hint{font-size:.65rem;color:var(--muted);margin-left:5px;opacity:.6}
+
+/* ── ESTOQUE MODULE ── */
+.est-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.est-search-wrap{flex:1;min-width:200px}
+.est-search{width:100%;height:36px;padding:0 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:.85rem;outline:none;transition:border-color .15s}
+.est-search:focus{border-color:#555}
+.est-count{font-size:.72rem;color:var(--muted);white-space:nowrap}
+.est-th{font-size:.65rem;letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;color:var(--muted);user-select:none}
+.est-th:hover{color:var(--text)}
+.est-row:hover{background:var(--surface2)}
+.est-sku{font-family:var(--mono);font-size:.8rem;white-space:nowrap;padding:8px 12px}
+.est-desc{font-size:.82rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 12px}
+.est-num{font-family:var(--mono);font-size:.82rem;padding:8px 12px}
+.es{font-size:.8rem;color:var(--muted);margin-top:6px}
+
 /* ── KIOSK SECTIONS (Quiosques panel) ── */
 .kiosk-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:12px}
 .ks-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px}
@@ -594,6 +648,7 @@ tr.inactive td{opacity:.35}
     <button class="tab"                 onclick="nav('kiosques',this)">Quiosques</button>
     <button class="tab admin-only" id="tabConsolidado" onclick="nav('consolidado',this)">Consolidado</button>
     <button class="tab admin-only" id="tabPremiacoes" onclick="nav('premiacoes',this)">Premiações</button>
+    <button class="tab admin-only" id="tabEstoque"     onclick="nav('estoque',this)">Estoque</button>
     <button class="tab admin-only" id="tabImport"      onclick="nav('import',this)">Importar</button>
     <button class="tab admin-only" id="tabGoals"       onclick="nav('goals',this)">Metas</button>
   </nav>
@@ -627,9 +682,15 @@ tr.inactive td{opacity:.35}
   <div id="consolidadoBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
 </section>
 
+<section class="pnl" id="pnl-estoque">
+  <div class="h1">Estoque</div>
+  <div class="sub">Produtos, SKUs e reposição por quiosque</div>
+  <div id="estoqueBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
+</section>
+
 <section class="pnl" id="pnl-import">
   <div class="h1">Importar Relatório</div><div class="sub">PDVSuite · VENRES.RPT</div>
-  <div class="notice">Formato: CSV exportado via <strong>Gestor → Relatório Financeiro → Vendas por Vendedor</strong>. Deduplicação por ID de transação (col. 55) — reimportar é sempre seguro.</div>
+  <div class="notice">Aceita os formatos <strong>Resumido</strong> (VENRES.RPT) e <strong>Analítico</strong> (VENDEDOR.RPT). O formato é detectado automaticamente. O analítico também atualiza o módulo de Estoque.</div>
   <div class="drop" id="drop" onclick="document.getElementById('fi').click()">
     <div class="drop-i">↑</div><div class="drop-t">Arraste o CSV aqui</div><div class="drop-h">ou clique para selecionar · .csv</div>
   </div>
@@ -713,6 +774,7 @@ function nav(id,btn){
   if(id==='goals') renderGoals();
   if(id==='consolidado') renderConsolidado();
   if(id==='premiacoes') renderPremiacoes();
+  if(id==='estoque') renderEstoque();
 }
 
 // ── MODAL LOGIN ──
@@ -739,9 +801,13 @@ let rawCSV=null;
 function readFile(f){
   resetLog();log(`📄 ${f.name}  (${(f.size/1024).toFixed(1)} KB)`,'info');
   const r=new FileReader();
-  r.onload=ev=>{rawCSV=ev.target.result;log(`✓ Lido — ${rawCSV.split('\n').length} linhas brutas`,'ok');preview(rawCSV);
-    document.getElementById('btnProc').disabled=false;
-
+  r.onload=ev=>{
+    rawCSV=ev.target.result;
+    const fmt=detectCSVFormat(rawCSV);
+    const ok=fmt==='analytic';
+    log(`✓ Lido — ${rawCSV.split('\n').length} linhas · ${ok?'✓ Analítico':'✗ Formato resumido — use o relatório Analítico (VENDEDOR.RPT)'}`,ok?'ok':'err');
+    preview(rawCSV);
+    document.getElementById('btnProc').disabled=!ok;
   };
   r.readAsText(f,'UTF-8');
 }
@@ -1083,6 +1149,12 @@ async function resetStore() {
 
 async function processCSV(){
   if(!rawCSV)return;
+  if(detectCSVFormat(rawCSV)!=='analytic'){
+    log('✗ Use o relatório Analítico (VENDEDOR.RPT). Resumido não é mais aceito.','err');
+    return;
+  }
+  return processAnalyticCSV();
+  // ── legacy summary code (unreachable, kept for reference) ──
   log('⟳ Processando…','info');
   document.getElementById('btnProc').disabled=true;
   const rows=parseCSVProper(rawCSV);
@@ -1712,6 +1784,129 @@ function buildAvailableWeeks() {
 // ══════════════════════════════════════════════════════════
 //  RENDER CONSOLIDADO (admin-only — gráficos + totais)
 // ══════════════════════════════════════════════════════════
+// ── SKU helpers ─────────────────────────────────────────
+function getTopSkus(skus, filterKiosk, limit) {
+  let entries = Object.entries(skus||{});
+  if (filterKiosk) {
+    entries = entries.filter(([,s]) => (s.byKiosk?.[filterKiosk]?.sold||0) > 0);
+    entries.sort(([,a],[,b]) => (b.byKiosk?.[filterKiosk]?.sold||0) - (a.byKiosk?.[filterKiosk]?.sold||0));
+  } else {
+    entries.sort(([,a],[,b]) => b.totalSold - a.totalSold);
+  }
+  return entries.slice(0, limit||50);
+}
+
+function renderSkuTable(entries, filterKiosk, opts) {
+  // opts: { showKiosks, compact }
+  const ks = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  const showKiosks = opts?.showKiosks && !filterKiosk;
+
+  let h = `<table class="sku-table"><thead><tr>
+    <th>SKU</th>
+    <th>Produto</th>
+    <th class="num">Un.</th>
+    <th class="num mo">Receita</th>
+    <th class="num mo">P. Médio</th>
+    ${showKiosks ? ks.map(kn=>`<th class="num" style="font-size:.6rem">${sK(kn)}</th>`).join('') : ''}
+  </tr></thead><tbody>`;
+
+  entries.forEach(([sku, s], idx) => {
+    const sold    = filterKiosk ? (s.byKiosk?.[filterKiosk]?.sold||0) : s.totalSold;
+    const revenue = filterKiosk ? (s.byKiosk?.[filterKiosk]?.revenue||0) : s.revenue;
+    const avg     = sold > 0 ? revenue/sold : 0;
+    const rowId   = `sku-row-${idx}`;
+    const detailId= `sku-det-${idx}`;
+
+    h += `<tr class="sku-row" onclick="toggleSkuDetail('${detailId}','${sku}')" style="cursor:pointer">
+      <td class="sku-code">${sku}</td>
+      <td class="sku-desc">${s.desc}</td>
+      <td class="num">${sold}</td>
+      <td class="num mo">${R(revenue)}</td>
+      <td class="num mo">${avg>0?R(avg):'—'}</td>
+      ${showKiosks ? ks.map(kn=>{
+        const kb = s.byKiosk?.[kn];
+        return `<td class="num" style="font-size:.78rem">${kb?.sold||'—'}</td>`;
+      }).join('') : ''}
+    </tr>
+    <tr id="${detailId}" class="sku-detail-row" style="display:none">
+      <td colspan="${5+(showKiosks?ks.length:0)}" class="sku-detail-cell">
+        <div class="sku-detail-inner" id="${detailId}-inner">
+          <div class="sku-detail-loading">Carregando…</div>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  h += `</tbody></table>`;
+  return h;
+}
+
+function toggleSkuDetail(detailId, sku) {
+  const row   = document.getElementById(detailId);
+  const inner = document.getElementById(detailId+'-inner');
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  if (open) { row.style.display = 'none'; return; }
+  row.style.display = '';
+
+  // Build per-kiosk breakdown
+  const s  = window._analytics?.skus?.[sku];
+  if (!s) { inner.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:8px">Sem dados analíticos</div>'; return; }
+
+  const ks = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  let h = `<div class="sku-breakdown">
+    <div class="sku-breakdown-title">
+      <strong>${sku}</strong> · ${s.desc}
+      · P. Tabela ${s.listPrice?R(s.listPrice):'—'}
+    </div>
+    <div class="sku-breakdown-grid">`;
+
+  ks.forEach(kn => {
+    const kb = s.byKiosk?.[kn];
+    if (!kb?.sold && !kb?.returned) return;
+    const avg = kb.sold>0 ? (kb.revenue||0)/kb.sold : 0;
+    h += `<div class="sku-bk-item">
+      <div class="sku-bk-name">${sK(kn)}</div>
+      <div class="sku-bk-nums">
+        <span>${kb.sold||0} un.</span>
+        ${kb.returned ? `<span style="color:var(--danger)">−${kb.returned} dev.</span>` : ''}
+        <span class="mo">${R(kb.revenue||0)}</span>
+        ${avg>0?`<span style="color:var(--muted)">~${R(avg)}</span>`:''}
+      </div>
+    </div>`;
+  });
+
+  h += `</div></div>`;
+  inner.innerHTML = h;
+}
+
+// ── SKU page state ──────────────────────────────────────
+let skuPage = 0;
+const SKU_PAGE_SIZE = 10;
+
+function setSkuPage(p) { skuPage = p; renderConsolidado(); }
+
+// ── Kiosk SKU modal ─────────────────────────────────────
+function openKioskSkuModal(kName) {
+  const skus = window._analytics?.skus;
+  if (!skus) return;
+  const top = getTopSkus(skus, kName, 10);
+  if (!top.length) return;
+
+  const modal = document.getElementById('kioskSkuModal');
+  const body  = document.getElementById('kioskSkuBody');
+  const title = document.getElementById('kioskSkuTitle');
+  if (!modal||!body||!title) return;
+
+  title.textContent = `Top SKUs · ${sK(kName)}`;
+  body.innerHTML = renderSkuTable(top, kName, {});
+  modal.classList.add('show');
+}
+
+function closeKioskSkuModal() {
+  document.getElementById('kioskSkuModal')?.classList.remove('show');
+}
+
 function renderConsolidado() {
   const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
   if (!ks.length) {
@@ -1814,8 +2009,10 @@ function renderConsolidado() {
       kGoal = kioskWeekGoal(k.name, geralWeek);
     }
     kTk = kPcs>0 ? kLiq/kPcs : 0;
-    h += `<tr>
-      <td><strong>${sK(k.name)}</strong><br><span style="font-size:.7rem;color:var(--muted)">${sc} vend.</span></td>
+    const hasSkuData = !!window._analytics?.skus && Object.values(window._analytics.skus).some(s=>s.byKiosk?.[k.name]?.sold>0);
+    h += `<tr class="${hasSkuData?'sku-kiosk-row':''}" ${hasSkuData?`onclick="openKioskSkuModal('${k.name.replace(/'/g,"\'")}')"`:''}
+      title="${hasSkuData?'Clique para ver top SKUs':''}">
+      <td><strong>${sK(k.name)}</strong>${hasSkuData?'<span class="sku-kiosk-hint"> ↗ top SKUs</span>':''}<br><span style="font-size:.7rem;color:var(--muted)">${sc} vend.</span></td>
       <td class="mo num">${R(kLiq)}</td><td class="num">${kPcs.toLocaleString('pt-BR')}</td>
       <td class="mo num">${kTk>0?R(kTk):'—'}</td>
       <td>${gBar(kLiq, kGoal)}</td>
@@ -1866,6 +2063,30 @@ function renderConsolidado() {
     </tr>`;
   });
   h += `</tbody></table></div>`;
+
+  // ── Top SKUs ────────────────────────────────────────
+  const skusData = window._analytics?.skus;
+  if (skusData && Object.keys(skusData).length) {
+    const allTopSkus = getTopSkus(skusData, null, 50);
+    const totalPages = Math.ceil(allTopSkus.length / SKU_PAGE_SIZE);
+    const pageStart  = skuPage * SKU_PAGE_SIZE;
+    const pageEntries= allTopSkus.slice(pageStart, pageStart + SKU_PAGE_SIZE);
+
+    h += `<div class="h2">Top Produtos</div>
+    <div class="sku-section">`;
+    h += renderSkuTable(pageEntries, null, { showKiosks: true });
+
+    // Pagination
+    if (totalPages > 1) {
+      h += `<div class="sku-pagination">`;
+      for (let p=0; p<totalPages; p++) {
+        h += `<button class="sku-page-btn${p===skuPage?' on':''}" onclick="setSkuPage(${p})">${p*SKU_PAGE_SIZE+1}–${Math.min((p+1)*SKU_PAGE_SIZE,allTopSkus.length)}</button>`;
+      }
+      h += `</div>`;
+    }
+    h += `</div>`;
+  }
+
   h += `<div class="meta-line">Importado em ${store.importedAt||'—'}</div>`;
 
   document.getElementById('consolidadoBody').innerHTML = h;
@@ -2667,6 +2888,301 @@ function clearMonthGoals() {
 }
 
 
+// ══════════════════════════════════════════════════════════
+//  ANALYTIC CSV PARSER  
+// ══════════════════════════════════════════════════════════
+function detectCSVFormat(text) {
+  // Analytic: has 'Ítens :' or 'Itens :' marker
+  return /[IÍ]tens\s*:/i.test(text) ? 'analytic' : 'summary';
+}
+
+async function processAnalyticCSV() {
+  if (!rawCSV) { log('Carregue um arquivo CSV primeiro.', 'err'); return; }
+  document.getElementById('btnProc').disabled = true;
+  log('⟳ Processando relatório analítico…', 'info');
+
+  const rows = parseCSVProper(rawCSV);
+  let period = null, gtLiq = 0, gtPecas = 0;
+
+  // Inherit existing store data
+  const kiosks   = JSON.parse(JSON.stringify(store.kiosks||{}));
+  const sellers  = JSON.parse(JSON.stringify(store.sellers||{}));
+  const existingTxns = new Set(store.txnKeys||[]);
+  const allDates = new Set(store.dateRange||[]);
+  const sellerTotals = {};
+
+  // Analytics data (separate Firestore doc)
+  const existingSkus  = JSON.parse(JSON.stringify(window._analytics?.skus||{}));
+  const existingTxnDetails = JSON.parse(JSON.stringify(window._analytics?.transactions||{}));
+
+  let newTxns = 0, dupTxns = 0;
+
+  // Group rows by transaction
+  const txnMap = {};
+  for (const r of rows) {
+    if (!r[3]?.includes('Loja')) continue;
+    const kName = (r[4]||'').replace(/\s+/g,' ').trim();
+    const sName = (r[6]||'').trim();
+    if (!kName || !sName) continue;
+    if (!period && r[1]) period = (r[1]||'').replace(/Período de /i,'').replace(/ Até /i,' – ').trim();
+
+    const txnId   = r[24]?.trim() || '';
+    const isItem  = r[43]?.trim() === 'Ítens :';
+    if (!isItem) continue;
+
+    const date    = normDate(r[25]||'');
+    const time_   = (r[27]||'').trim();
+    const sku     = (r[44]||'').trim();
+    const desc    = (r[45]||'').trim();
+    const price   = brNum(r[47]);
+    const listP   = brNum(r[49]);
+    const op      = (r[52]||'').trim();
+    const qtySold = parseInt(r[54]||'0') || 0;
+    const qtyXch  = parseInt(r[55]||'0') || 0;
+
+    if (!txnId || !sku) continue;
+
+    if (!txnMap[txnId]) txnMap[txnId] = { kName, sName, date, time: time_, items:[], txnId };
+    txnMap[txnId].items.push({ sku, desc, price, listPrice:listP, op, qty:qtySold, qtyX:qtyXch });
+  }
+
+  // Process each transaction
+  for (const [txnId, txn] of Object.entries(txnMap)) {
+    const isDup = existingTxns.has(txnId);
+    if (isDup) { dupTxns++; continue; }
+    existingTxns.add(txnId);
+    newTxns++;
+
+    const { kName, sName, date } = txn;
+    if (date) allDates.add(date);
+
+    // Compute transaction totals for store aggregates
+    let txnLiq = 0, txnPcs = 0, txnTroca = 0;
+    for (const item of txn.items) {
+      if (item.op === 'Venda') { txnLiq += item.price * item.qty; txnPcs += item.qty; }
+      else if (item.op === 'Troca') txnTroca += item.qtyX;
+    }
+
+    // Update kiosk/seller store aggregates (same as summary format)
+    if (!kiosks[kName]) kiosks[kName] = {name:kName,liq:0,pecas:0,trocas:0,sellers:{},byDate:{}};
+    const K = kiosks[kName];
+    if (!K.sellers[sName]) K.sellers[sName] = {name:sName,trocas:0,byDate:{}};
+    if (date) {
+      if (!K.byDate[date]) K.byDate[date] = {liq:0,pecas:0};
+      K.byDate[date].liq   += txnLiq;
+      K.byDate[date].pecas += txnPcs;
+      const S = K.sellers[sName];
+      if (!S.byDate[date]) S.byDate[date] = {liq:0,pecas:0};
+      S.byDate[date].liq   += txnLiq;
+      S.byDate[date].pecas += txnPcs;
+      S.trocas += txnTroca;
+    }
+
+    // Seller totals for liq/pecas/dias
+    const stk = kName+'||'+sName;
+    if (!sellerTotals[stk]) sellerTotals[stk] = {kName,sName,liq:0,pecas:0,trocas:0,dates:new Set()};
+    sellerTotals[stk].liq    += txnLiq;
+    sellerTotals[stk].pecas  += txnPcs;
+    sellerTotals[stk].trocas += txnTroca;
+    if (date) sellerTotals[stk].dates.add(date);
+
+    // Store transaction detail for analytics
+    existingTxnDetails[txnId] = {
+      kiosk: kName, seller: sName, date, time: txn.time,
+      items: txn.items
+    };
+
+    // Update SKU analytics
+    for (const item of txn.items) {
+      if (!existingSkus[item.sku]) {
+        existingSkus[item.sku] = {
+          desc: item.desc, listPrice: item.listPrice, practPrice: item.price,
+          totalSold:0, totalReturned:0, revenue:0,
+          byKiosk:{}, byDate:{}
+        };
+      }
+      const sk = existingSkus[item.sku];
+      sk.desc = item.desc;
+      sk.listPrice  = Math.max(sk.listPrice||0, item.listPrice);
+      sk.practPrice = item.price;
+      if (!sk.byKiosk[kName]) sk.byKiosk[kName] = {sold:0,returned:0,revenue:0};
+      if (item.op === 'Venda') {
+        sk.totalSold     += item.qty;
+        sk.revenue       += item.price * item.qty;
+        sk.byKiosk[kName].sold    += item.qty;
+        sk.byKiosk[kName].revenue += item.price * item.qty;
+        if (date) sk.byDate[date] = (sk.byDate[date]||0) + item.qty;
+      } else if (item.op === 'Troca') {
+        sk.totalReturned += item.qtyX;
+        sk.byKiosk[kName].returned += item.qtyX;
+      }
+    }
+  }
+
+  // Finalize seller aggregates
+  for (const st of Object.values(sellerTotals)) {
+    const K = kiosks[st.kName]; if (!K) continue;
+    if (!K.sellers[st.sName]) K.sellers[st.sName] = {name:st.sName,trocas:0,byDate:{}};
+    const S = K.sellers[st.sName];
+    S.liq   = (S.liq||0)  + st.liq;
+    S.pecas = (S.pecas||0) + st.pecas;
+    S.dias  = (st.dates.size);
+    S.trocas= (S.trocas||0) + st.trocas;
+  }
+  for (const kn in kiosks) {
+    const K = kiosks[kn]; K.liq = K.pecas = 0;
+    for (const sn in K.sellers) {
+      K.liq   += K.sellers[sn].liq||0;
+      K.pecas += K.sellers[sn].pecas||0;
+    }
+    for (const sn in K.sellers) {
+      const S = K.sellers[sn];
+      if (!sellers[sn]||(S.liq||0)>(sellers[sn].liq||0)) sellers[sn]={...S,kiosk:kn};
+    }
+  }
+
+  // Get GT totals from summary lines
+  for (const r of rows) {
+    const gl = brNum(r[67]||''); const gp = brInt(r[71]||'');
+    if (gl > gtLiq) { gtLiq = gl; gtPecas = gp; }
+  }
+
+  const kCount = Object.keys(kiosks).length;
+  if (!kCount) { log('✗ Nenhum quiosque encontrado.','err'); document.getElementById('btnProc').disabled=false; return; }
+
+  log(`✓ ${kCount} quiosques · ${Object.keys(sellers).length} vendedores · ${Object.keys(existingSkus).length} SKUs`, 'ok');
+  log(`✓ Transações novas: ${newTxns}  · Duplicatas: ${dupTxns}`, dupTxns>0?'warn':'ok');
+  log('⟳ Salvando no Firebase…','info');
+
+  try {
+    const newStore = {
+      period, importedAt: new Date().toLocaleString('pt-BR'),
+      gtLiq, gtPecas, kiosks, sellers,
+      txnKeys: Array.from(existingTxns),
+      dateRange: Array.from(allDates).sort()
+    };
+    const newAnalytics = {
+      skus: existingSkus,
+      transactions: existingTxnDetails,
+      importedAt: newStore.importedAt,
+      period, dateRange: newStore.dateRange
+    };
+    await window.fbSaveStore(newStore);
+    await window.fbSaveAnalytics(newAnalytics);
+    log('✓ Dados analíticos importados e publicados!','ok');
+    toast('Analítico importado ✓','ok');
+    renderGeral(); renderKiosques();
+    renderEstoque();
+  } catch(e) { log('✗ Erro: '+e.message,'err'); }
+  document.getElementById('btnProc').disabled = false;
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER ESTOQUE  
+// ══════════════════════════════════════════════════════════
+let estoqueFilter   = '';        // search string
+let estoqueSortCol  = 'sold';    // sold | revenue | returns | sku | desc
+let estoqueSortAsc  = false;
+
+function setEstoqueFilter(v) { estoqueFilter = v; renderEstoque(); }
+function setEstoqueSort(col) {
+  if (estoqueSortCol === col) estoqueSortAsc = !estoqueSortAsc;
+  else { estoqueSortCol = col; estoqueSortAsc = false; }
+  renderEstoque();
+}
+
+function renderEstoque() {
+  const el = document.getElementById('estoqueBody');
+  if (!el) return;
+  const analytics = window._analytics;
+  if (!analytics?.skus || !Object.keys(analytics.skus).length) {
+    el.innerHTML = `<div class="empty">
+      <div class="ei">○</div>
+      <div class="et">Nenhum dado analítico</div>
+      <div class="es">Importe um relatório no formato analítico (PDV_ANALITICO) na aba Importar</div>
+    </div>`;
+    return;
+  }
+
+  const ks = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  const skus = Object.entries(analytics.skus);
+
+  // Filter
+  const q = estoqueFilter.toLowerCase();
+  let filtered = q
+    ? skus.filter(([sku,s]) => sku.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q))
+    : skus;
+
+  // Sort
+  const sortFns = {
+    sold:    ([,a],[,b]) => b.totalSold    - a.totalSold,
+    revenue: ([,a],[,b]) => b.revenue      - a.revenue,
+    returns: ([,a],[,b]) => b.totalReturned- a.totalReturned,
+    sku:     ([a],[b])   => a.localeCompare(b),
+    desc:    ([,a],[,b]) => a.desc.localeCompare(b.desc),
+    net:     ([,a],[,b]) => (b.totalSold-b.totalReturned)-(a.totalSold-a.totalReturned),
+  };
+  filtered.sort(sortFns[estoqueSortCol]||sortFns.sold);
+  if (estoqueSortAsc) filtered.reverse();
+
+  // Build KPI summary
+  const totalSold     = skus.reduce((s,[,v])=>s+v.totalSold,0);
+  const totalRevenue  = skus.reduce((s,[,v])=>s+v.revenue,0);
+  const totalReturned = skus.reduce((s,[,v])=>s+v.totalReturned,0);
+  const totalSkus     = skus.length;
+
+  let h = `<div class="kpi-g" style="margin-bottom:16px">
+    <div class="kpi"><div class="kpi-l">SKUs únicos</div><div class="kpi-v">${totalSkus}</div></div>
+    <div class="kpi"><div class="kpi-l">Unidades vendidas</div><div class="kpi-v">${totalSold.toLocaleString('pt-BR')}</div></div>
+    <div class="kpi"><div class="kpi-l">Faturamento (SKU)</div><div class="kpi-v">${R(totalRevenue)}</div></div>
+    <div class="kpi"><div class="kpi-l">Devoluções</div><div class="kpi-v">${totalReturned.toLocaleString('pt-BR')}</div></div>
+  </div>`;
+
+  // Search + sort toolbar
+  const sortIcon = col => estoqueSortCol===col ? (estoqueSortAsc?'↑':'↓') : '';
+  h += `<div class="est-toolbar">
+    <div class="est-search-wrap">
+      <input class="est-search" type="text" placeholder="Buscar SKU ou produto…"
+        value="${estoqueFilter}" oninput="setEstoqueFilter(this.value)">
+    </div>
+    <div class="est-count">${filtered.length} de ${totalSkus} produtos</div>
+  </div>`;
+
+  // Table
+  h += `<div class="tw tw-scroll"><table>
+    <thead><tr>
+      <th class="est-th" onclick="setEstoqueSort('sku')" style="cursor:pointer">SKU ${sortIcon('sku')}</th>
+      <th class="est-th" onclick="setEstoqueSort('desc')" style="cursor:pointer">Produto ${sortIcon('desc')}</th>
+      <th class="est-th num" onclick="setEstoqueSort('sold')" style="cursor:pointer">Vendas ${sortIcon('sold')}</th>
+      <th class="est-th num" onclick="setEstoqueSort('returns')" style="cursor:pointer">Dev. ${sortIcon('returns')}</th>
+      <th class="est-th num" onclick="setEstoqueSort('net')" style="cursor:pointer">Líquido ${sortIcon('net')}</th>
+      <th class="est-th num" onclick="setEstoqueSort('revenue')" style="cursor:pointer">Receita ${sortIcon('revenue')}</th>
+      ${ks.map(kn=>`<th class="est-th num" style="font-size:.6rem">${sK(kn)}</th>`).join('')}
+    </tr></thead><tbody>`;
+
+  for (const [sku, s] of filtered) {
+    const net = s.totalSold - s.totalReturned;
+    const avgPrice = s.totalSold>0 ? s.revenue/s.totalSold : 0;
+    h += `<tr class="est-row">
+      <td class="est-sku">${sku}</td>
+      <td class="est-desc" title="${s.desc}">${s.desc}</td>
+      <td class="num est-num">${s.totalSold}</td>
+      <td class="num est-num" style="color:${s.totalReturned>0?'var(--danger)':'var(--muted)'}">${s.totalReturned||'—'}</td>
+      <td class="num est-num" style="color:${net>0?'var(--success)':'var(--muted)'}">${net}</td>
+      <td class="num est-num mo">${R(s.revenue)}</td>
+      ${ks.map(kn=>{
+        const kb = s.byKiosk[kn];
+        return `<td class="num est-num" style="font-size:.78rem">${kb?.sold||'—'}</td>`;
+      }).join('')}
+    </tr>`;
+  }
+
+  h += `</tbody></table></div>`;
+  h += `<div class="meta-line">Analítico: ${analytics.importedAt||'—'} · ${analytics.period||''}</div>`;
+  el.innerHTML = h;
+}
+
+
 // ── Re-render if Firebase snapshots already fired before this script loaded ──
 document.addEventListener('DOMContentLoaded', () => {
   if (Object.keys(window._store?.kiosks || {}).length > 0) {
@@ -2677,5 +3193,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 </script>
+<!-- Kiosk SKU Modal -->
+<div id="kioskSkuModal" class="ov" onclick="if(event.target===this)closeKioskSkuModal()">
+  <div class="modal" style="max-width:680px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="h2" id="kioskSkuTitle" style="margin:0">Top SKUs</div>
+      <button onclick="closeKioskSkuModal()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div id="kioskSkuBody"></div>
+  </div>
+</div>
 </body>
 </html>
