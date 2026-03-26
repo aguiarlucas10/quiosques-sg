@@ -1447,6 +1447,7 @@ function renderGeral() {
     h += `</select></div>`;
   }
   h += `</div>`;  // geral-filters
+  const allDates = (store.dateRange||[]).slice().sort();
 
   // ── Kiosk cards ──────────────────────────────────────
 
@@ -1688,12 +1689,12 @@ function renderGeral() {
   destroyChart(aggId);
   const aggCanvas = document.getElementById(aggId);
   if (aggCanvas) {
-    const allDates = (store.dateRange||[]).slice().sort().filter(d => d.slice(0,7) === selMonth);
+    const chartDates = allDates.filter(d => d.slice(0,7) === selMonth);
     const datasets = ks.map((k,ki) => {
       const kc = KC[ki % KC.length];
       return {
         label: sK(k.name),
-        data: allDates.map(d => k.byDate?.[d]?.liq || 0),
+        data: chartDates.map(d => k.byDate?.[d]?.liq || 0),
         borderColor: kc.line,
         backgroundColor: kc.fill,
         tension: .35, fill: false,
@@ -1725,7 +1726,7 @@ function renderGeral() {
     destroyChart(cId);
     const cv = document.getElementById(cId); if (!cv) return;
     const kc = KC[ki % KC.length];
-    const dates = (store.dateRange||[]).slice().sort().filter(d => d.slice(0,7) === selMonth);
+    const dates = allDates.filter(d => d.slice(0,7) === selMonth);
     chartInstances[cId] = new Chart(cv, {
       type:'line',
       data:{
