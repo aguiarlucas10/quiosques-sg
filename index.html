@@ -2651,8 +2651,12 @@ function parseDailyGoalCSV(text) {
     const day = dm[1].padStart(2,'0'), mon = dm[2].padStart(2,'0');
     const yr  = dm[3] ? (dm[3].length===2 ? '20'+dm[3] : dm[3]) : new Date().getFullYear().toString();
     const dateKey = `${yr}-${mon}-${day}`;
-    // Parse meta value (BR format or plain)
-    const meta = parseFloat(rawMeta.replace(/\./g,'').replace(',','.'));
+    // Parse meta value — handle both BR format (3.200 or 3.200,00) and plain (3200)
+    const metaClean = rawMeta
+      .replace(/\s/g,'')
+      .replace(/\.(\d{3})/g,'$1')   // remove BR thousands separator (3.200 → 3200)
+      .replace(',','.');             // convert BR decimal comma to dot
+    const meta = parseFloat(metaClean);
     if (isNaN(meta) || meta < 0) { errors.push(`Linha ${i+1}: meta inválida '${rawMeta}'`); continue; }
     // Match kiosk name (fuzzy)
     const kMatch = Object.keys(store.kiosks).find(k =>
