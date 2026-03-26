@@ -701,12 +701,7 @@ tr.inactive td{opacity:.35}
   <input type="file" id="fi" accept=".csv,.txt" onchange="onFile(event)">
   <div class="logbox" id="logbox"><div class="ll dim">— aguardando arquivo —</div></div>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-    <button class="btn-primary" id="btnProc" onclick="processCSV()" disabled>Importar (acumular)</button>
-    <button class="btn-secondary" id="btnRebuild" onclick="rebuildFromCSV()" disabled>Reconstruir do zero</button>
-  </div>
-  <div style="margin-top:10px;font-size:.72rem;color:var(--muted);line-height:1.6">
-    <strong style="color:var(--text)">Importar:</strong> acumula sobre dados existentes, ignora duplicatas.<br>
-    <strong style="color:var(--text)">Reconstruir:</strong> recomputa tudo do zero a partir do CSV carregado. Use para corrigir dados duplicados.
+    <button class="btn-primary" id="btnProc" onclick="processCSV()" disabled>Importar e publicar</button>
   </div>
 </section>
 
@@ -811,7 +806,7 @@ function readFile(f){
   const r=new FileReader();
   r.onload=ev=>{rawCSV=ev.target.result;log(`✓ Lido — ${rawCSV.split('\n').length} linhas brutas`,'ok');preview(rawCSV);
     document.getElementById('btnProc').disabled=false;
-    const rb=document.getElementById('btnRebuild');if(rb)rb.disabled=false;
+
   };
   r.readAsText(f,'UTF-8');
 }
@@ -1029,7 +1024,7 @@ async function rebuildFromCSV() {
 
   log('⟳ Reconstruindo do zero (ignorando dados existentes)…', 'info');
   document.getElementById('btnProc').disabled = true;
-  document.getElementById('btnRebuild').disabled = true;
+
 
   const rows = parseCSVProper(rawCSV);
   // Start FRESH — empty kiosks, sellers, txnKeys
@@ -1095,7 +1090,7 @@ async function rebuildFromCSV() {
   if (kCount === 0) {
     log('✗ Nenhum quiosque encontrado.', 'err');
     document.getElementById('btnProc').disabled = false;
-    document.getElementById('btnRebuild').disabled = false;
+
     return;
   }
 
@@ -1118,7 +1113,7 @@ async function rebuildFromCSV() {
     log('✗ Erro ao salvar: ' + e.message, 'err');
   }
   document.getElementById('btnProc').disabled = false;
-  document.getElementById('btnRebuild').disabled = false;
+
 }
 
 async function resetStore() {
