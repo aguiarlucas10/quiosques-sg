@@ -1811,14 +1811,32 @@ function buildAvailableWeeks() {
 //  RENDER CONSOLIDADO (admin-only — gráficos + totais)
 // ══════════════════════════════════════════════════════════
 // ── SKU helpers ─────────────────────────────────────────
-function getTopSkus(skus, filterKiosk, limit) {
+function getTopSkus(skus, filterKiosk, limit, sortBy) {
+  // sortBy: 'revenue' (default) | 'sold' | 'avg' | 'returns'
+  sortBy = sortBy || 'revenue';
   let entries = Object.entries(skus||{});
   if (filterKiosk) {
     entries = entries.filter(([,s]) => (s.byKiosk?.[filterKiosk]?.sold||0) > 0);
-    entries.sort(([,a],[,b]) => (b.byKiosk?.[filterKiosk]?.sold||0) - (a.byKiosk?.[filterKiosk]?.sold||0));
-  } else {
-    entries.sort(([,a],[,b]) => b.totalSold - a.totalSold);
   }
+  const sortFns = {
+    revenue: ([,a],[,b]) => {
+      const ar = filterKiosk ? (a.byKiosk?.[filterKiosk]?.revenue||0) : a.revenue;
+      const br = filterKiosk ? (b.byKiosk?.[filterKiosk]?.revenue||0) : b.revenue;
+      return br - ar;
+    },
+    sold: ([,a],[,b]) => {
+      const as = filterKiosk ? (a.byKiosk?.[filterKiosk]?.sold||0) : a.totalSold;
+      const bs = filterKiosk ? (b.byKiosk?.[filterKiosk]?.sold||0) : b.totalSold;
+      return bs - as;
+    },
+    avg: ([,a],[,b]) => {
+      const aa = a.totalSold>0 ? a.revenue/a.totalSold : 0;
+      const ba = b.totalSold>0 ? b.revenue/b.totalSold : 0;
+      return ba - aa;
+    },
+    returns: ([,a],[,b]) => (b.totalReturned||0) - (a.totalReturned||0),
+  };
+  entries.sort(sortFns[sortBy] || sortFns.revenue);
   return entries.slice(0, limit||50);
 }
 
@@ -1827,12 +1845,18 @@ function renderSkuTable(entries, filterKiosk, opts) {
   const ks = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
   const showKiosks = opts?.showKiosks && !filterKiosk;
 
+  const sortBy = opts?.sortBy || null;
+  const si = col => sortBy===col ? ' ↓' : '';
+  const thSort = (col, label, cls='') => sortBy !== null
+    ? `<th class="num${cls?' '+cls:''}" onclick="setSkuSort('${col}')" style="cursor:pointer;user-select:none">${label}${si(col)}</th>`
+    : `<th class="num${cls?' '+cls:''}">${label}</th>`;
+
   let h = `<table class="sku-table"><thead><tr>
     <th>SKU</th>
     <th>Produto</th>
-    <th class="num">Un.</th>
-    <th class="num mo">Receita</th>
-    <th class="num mo">P. Médio</th>
+    ${thSort('sold','Un.')}
+    ${thSort('revenue','Receita','mo')}
+    ${thSort('avg','P. Médio','mo')}
     ${showKiosks ? ks.map(kn=>`<th class="num" style="font-size:.6rem">${sK(kn)}</th>`).join('') : ''}
   </tr></thead><tbody>`;
 
@@ -1908,9 +1932,11 @@ function toggleSkuDetail(detailId, sku) {
 
 // ── SKU page state ──────────────────────────────────────
 let skuPage = 0;
+let skuSort = 'revenue';  // default: sort by revenue
 const SKU_PAGE_SIZE = 10;
 
 function setSkuPage(p) { skuPage = p; renderConsolidado(); }
+function setSkuSort(col) { skuSort = col; skuPage = 0; renderConsolidado(); }
 
 // ── Kiosk SKU modal ─────────────────────────────────────
 function openKioskSkuModal(kName) {
@@ -2093,14 +2119,14 @@ function renderConsolidado() {
   // ── Top SKUs ────────────────────────────────────────
   const skusData = window._analytics?.skus;
   if (skusData && Object.keys(skusData).length) {
-    const allTopSkus = getTopSkus(skusData, null, 50);
+    const allTopSkus = getTopSkus(skusData, null, 50, skuSort);
     const totalPages = Math.ceil(allTopSkus.length / SKU_PAGE_SIZE);
     const pageStart  = skuPage * SKU_PAGE_SIZE;
     const pageEntries= allTopSkus.slice(pageStart, pageStart + SKU_PAGE_SIZE);
 
     h += `<div class="h2">Top Produtos</div>
     <div class="sku-section">`;
-    h += renderSkuTable(pageEntries, null, { showKiosks: true });
+    h += renderSkuTable(pageEntries, null, { showKiosks: true, sortBy: skuSort });
 
     // Pagination
     if (totalPages > 1) {
