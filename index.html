@@ -960,20 +960,7 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
     </div>
   </div>
 </div>
-    <div class="fld">
-      <label class="fl">Email</label>
-      <input class="fi2" id="inU" type="email" placeholder="admin@exemplo.com"
-        onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <div class="fld">
-      <label class="fl">Senha</label>
-      <input class="fi2" id="inP" type="password" placeholder="••••••••"
-        onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <div class="me" id="me"></div>
-    <button class="bm" id="btnLoginSubmit" onclick="doLogin()">Entrar</button>
-  </div>
-</div>
+
 
 
 <script>
@@ -1014,7 +1001,7 @@ function showEmptyState(){
 
 // ── NAV ──
 function nav(id,btn){
-  if((id==='import'||id==='goals'||id==='consolidado'||id==='premiacoes')&&!window._isAdmin){openLogin();return;}
+  if(!window.canAccessTab?.(id)){document.getElementById('authScreen')?.classList.add('show');window.showAuthTab?.('login');return;}
   document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.getElementById('pnl-'+id).classList.add('on');
