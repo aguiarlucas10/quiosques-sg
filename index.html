@@ -87,6 +87,7 @@ function sanitizeGoals(g) {
       monthlyByMonth: cleanObj(G.monthlyByMonth||{}),
       weeklyOverride: cleanObj(G.weeklyOverride||{}),
       activeSellers:  Array.isArray(G.activeSellers) ? G.activeSellers.filter(s=>typeof s==='string'&&!isCorrupt(s)) : [],
+      dailyByDate:    cleanObj(G.dailyByDate||{}),
     };
   };
   const cleanSeller = S => {
@@ -2658,13 +2659,15 @@ function parseDailyGoalCSV(text) {
       .replace(',','.');             // convert BR decimal comma to dot
     const meta = parseFloat(metaClean);
     if (isNaN(meta) || meta < 0) { errors.push(`Linha ${i+1}: meta inválida '${rawMeta}'`); continue; }
-    // Match kiosk name (fuzzy)
-    const kMatch = Object.keys(store.kiosks).find(k =>
+    // Match kiosk name (fuzzy) — try full name, short name, and partial match
+    const kKeys = Object.keys(store.kiosks);
+    const kMatch = kKeys.find(k =>
       k.toLowerCase().includes(kName.toLowerCase()) ||
       kName.toLowerCase().includes(sK(k).toLowerCase()) ||
       sK(k).toLowerCase().includes(kName.toLowerCase())
-    ) || kName;
-    rows.push({ dateKey, kName: kMatch, meta });
+    );
+    // If no match found, store under raw CSV name (will be fixed when store loads)
+    rows.push({ dateKey, kName: kMatch || kName, meta, rawKName: kName });
   }
   return { rows, errors };
 }
@@ -2705,11 +2708,17 @@ async function saveDailyGoals() {
   if (btn) btn.disabled = true;
   showStatus('Salvando metas diárias…', 'dim');
 
-  // Merge into goals
-  _pendingDailyGoals.forEach(({dateKey, kName, meta}) => {
-    ensureKiosk(kName);
-    if (!goals.kiosks[kName].dailyByDate) goals.kiosks[kName].dailyByDate = {};
-    goals.kiosks[kName].dailyByDate[dateKey] = meta;
+  // Merge into goals — re-resolve kiosk names at save time (store is now loaded)
+  _pendingDailyGoals.forEach(({dateKey, kName, rawKName, meta}) => {
+    // Re-run fuzzy match now that store is definitely loaded
+    const resolvedName = Object.keys(store.kiosks).find(k =>
+      k.toLowerCase().includes((rawKName||kName).toLowerCase()) ||
+      (rawKName||kName).toLowerCase().includes(sK(k).toLowerCase()) ||
+      sK(k).toLowerCase().includes((rawKName||kName).toLowerCase())
+    ) || kName;
+    ensureKiosk(resolvedName);
+    if (!goals.kiosks[resolvedName].dailyByDate) goals.kiosks[resolvedName].dailyByDate = {};
+    goals.kiosks[resolvedName].dailyByDate[dateKey] = meta;
   });
 
   // Derive monthlyByMonth and weeklyOverride from dailyByDate for each kiosk
