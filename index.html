@@ -2932,6 +2932,10 @@ async function processAnalyticCSV() {
 
     const date    = normDate(r[25]||'');
     const time_   = (r[27]||'').trim();
+    // col[28] = Valor = faturamento líquido real recebido (já descontado crédito de troca)
+    // col[39] = Total de Peças Vendidas na transação
+    const txnValor = brNum(r[28]);
+    const txnPiecesTotal = parseInt(r[39]||'0') || 0;
     const sku     = (r[44]||'').trim();
     const desc    = (r[45]||'').trim();
     const price   = brNum(r[47]);
@@ -2942,7 +2946,8 @@ async function processAnalyticCSV() {
 
     if (!txnId || !sku) continue;
 
-    if (!txnMap[txnId]) txnMap[txnId] = { kName, sName, date, time: time_, items:[], txnId };
+    if (!txnMap[txnId]) txnMap[txnId] = { kName, sName, date, time: time_, items:[], txnId,
+                                           liq: txnValor, pcs: txnPiecesTotal };
     txnMap[txnId].items.push({ sku, desc, price, listPrice:listP, op, qty:qtySold, qtyX:qtyXch });
   }
 
@@ -2956,11 +2961,12 @@ async function processAnalyticCSV() {
     const { kName, sName, date } = txn;
     if (date) allDates.add(date);
 
-    // Compute transaction totals for store aggregates
-    let txnLiq = 0, txnPcs = 0, txnTroca = 0;
+    // Use col[28] = Valor líquido real, col[39] = total peças (from txn header, not item sum)
+    const txnLiq   = txn.liq;   // net amount actually received (post-exchange credit)
+    const txnPcs   = txn.pcs;   // total pieces sold in this transaction
+    let txnTroca = 0;
     for (const item of txn.items) {
-      if (item.op === 'Venda') { txnLiq += item.price * item.qty; txnPcs += item.qty; }
-      else if (item.op === 'Troca') txnTroca += item.qtyX;
+      if (item.op === 'Troca') txnTroca += item.qtyX;
     }
 
     // Update kiosk/seller store aggregates (same as summary format)
