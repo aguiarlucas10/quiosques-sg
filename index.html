@@ -130,7 +130,6 @@ onAuthStateChanged(auth, async user => {
         }
         applyRoleUI(profile);
         closeAuthScreens();
-        window.tryRender?.();
         return;
       }
       // Profile doc not found — user exists in Auth but not Firestore
@@ -154,6 +153,9 @@ onAuthStateChanged(auth, async user => {
       await signOut(auth);
       return;
     }
+    // Profile loaded successfully — render outside try/catch
+    window.tryRender?.();
+    return;
   }
   // Not logged in
   window._isAdmin     = false;
@@ -1265,6 +1267,110 @@ function setGeralWeek(val) {
 function setGeralDay(val) {
   geralDay = val || null;
   renderGeral();
+}
+
+function setGeralPeriod(val) {
+  geralPeriod = val;
+  geralWeek   = null;
+  renderGeral();
+}
+function setGeralWeek(val) {
+  geralWeek = val || null;
+  renderGeral();
+}
+function setGeralDay(val) {
+  geralDay = val || null;
+  renderGeral();
+}
+
+// ── Missing utility helpers ───────────────────────────
+function availableMonths() {
+  const set = new Set();
+  (store.dateRange||[]).forEach(d => set.add(d.slice(0,7)));
+  Object.values(store.kiosks||{}).forEach(k =>
+    Object.keys(k.byDate||{}).forEach(d => set.add(d.slice(0,7)))
+  );
+  if (!set.size) { const now=new Date(); set.add(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`); }
+  return [...set].sort();
+}
+function monthLabel(ym) {
+  if (!ym) return '';
+  const [y,m] = ym.split('-');
+  const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return (names[parseInt(m)-1]||m) + ' ' + y;
+}
+function weeksInMonth(year, month) {
+  const weeks = [];
+  const firstDay = new Date(year, month-1, 1);
+  const lastDay  = new Date(year, month, 0);
+  let cur = new Date(firstDay);
+  const dow = cur.getDay();
+  const daysBack = dow===0 ? 6 : dow-1;
+  cur.setDate(cur.getDate() - daysBack);
+  while (cur <= lastDay) {
+    const monday = new Date(cur);
+    const sunday = new Date(cur); sunday.setDate(sunday.getDate()+6);
+    const monKey = monday.toISOString().slice(0,10);
+    const mLabel = `${monday.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} – ${sunday.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`;
+    const crossMonth = monday.getMonth() !== lastDay.getMonth() || sunday.getMonth() !== firstDay.getMonth();
+    weeks.push({ monKey, label: mLabel, monday, sunday, crossMonth, monthKey: ym });
+    cur.setDate(cur.getDate()+7);
+  }
+  return weeks;
+  function ym() { return `${year}-${String(month).padStart(2,'0')}`; }
+}
+function fmtDL(dateKey) {
+  if (!dateKey) return '';
+  const [,m,d] = dateKey.split('-');
+  return d+'/'+m;
+}
+function fmtDateBR(dateKey) {
+  if (!dateKey) return '';
+  const [,m,d] = dateKey.split('-');
+  return d+'/'+m;
+}
+function R(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return 'R$ ' + Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function brNum(s) {
+  if (!s) return 0;
+  try { return parseFloat(String(s).replace(/\./g,'').replace(',','.')); } catch { return 0; }
+}
+function brInt(s) { return parseInt(String(s||'').replace(/\D/g,''))||0; }
+function normDate(s) {
+  if (!s) return '';
+  const m = String(s).match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (!m) return '';
+  const [,d,mo,y] = m;
+  const yr = y.length===2 ? '20'+y : y;
+  return `${yr}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+}
+function sK(n) {
+  return (n||'').replace(/QUIOSQUE\s*/i,'').replace(/\s*SHOPPING\s*/i,'').replace(/\s*PLAZA\s*/i,'').replace(/\s{2,}/g,' ').trim();
+}
+function gColor(pct) {
+  if (pct >= 100) return 'var(--success)';
+  if (pct >= 70)  return '#f59e0b';
+  return 'var(--danger)';
+}
+function floorPct(p) { return (Math.floor(p*10)/10).toFixed(1); }
+function gBar(val, goal) {
+  if (!goal) return '';
+  const pct = Math.min((val/goal)*100, 100);
+  return `<div class="goal-bar-wrap"><div class="goal-bar-fill" style="width:${pct}%;background:${gColor((val/goal)*100)}"></div></div><span class="goal-pct" style="color:${gColor((val/goal)*100)}">${floorPct((val/goal)*100)}%</span>`;
+}
+function kWeekLiq(kName, monday, sunday) {
+  const K = store.kiosks[kName]; if (!K) return 0;
+  return Object.entries(K.byDate||{}).reduce((s,[d,v]) => {
+    const dt = new Date(d+'T00:00:00');
+    return (dt>=monday && dt<=sunday) ? s+(v.liq||0) : s;
+  }, 0);
+}
+function activeSellers(kName) {
+  const G = goals.kiosks?.[kName];
+  if (G?.activeSellers?.length) return G.activeSellers;
+  return Object.keys(store.kiosks?.[kName]?.sellers||{});
 }
 
 // Última data de venda registrada num quiosque
@@ -3777,14 +3883,16 @@ function exportReposicao() {
 
 // ── tryRender — called by Firebase module when data changes ────────────────
 window.tryRender = function tryRender() {
-  const tab = document.querySelector('.pnl.on')?.id?.replace('pnl-','') || 'geral';
   if (!window._userProfile) return;  // not logged in yet
-  if (tab === 'geral')        { window.renderGeral?.();        return; }
-  if (tab === 'kiosques')     { window.renderKiosques?.();     return; }
-  if (tab === 'consolidado')  { window.renderConsolidado?.();  return; }
-  if (tab === 'premiacoes')   { window.renderPremiacoes?.();   return; }
-  // Default: always refresh geral in background
-  window.renderGeral?.();
+  if (!document.getElementById('geralBody')) return;  // DOM not ready
+  try {
+    const tab = document.querySelector('.pnl.on')?.id?.replace('pnl-','') || 'geral';
+    if (tab === 'geral')        { renderGeral();        return; }
+    if (tab === 'kiosques')     { renderKiosques();     return; }
+    if (tab === 'consolidado')  { renderConsolidado();  return; }
+    if (tab === 'premiacoes')   { renderPremiacoes();   return; }
+    renderGeral();
+  } catch(e) { console.warn('tryRender:', e.message); }
 };
 
 // ── Re-render if Firebase snapshots already fired before this script loaded ──
