@@ -462,6 +462,8 @@ tr.inactive td{opacity:.35}
 
 /* ── CHART WRAPPERS ── */
 .gc-agg-chart{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:12px}
+.gc-agg-chart-canvas-wrap{position:relative;height:160px}
+.gc-agg-chart-canvas-wrap canvas{position:absolute;top:0;left:0;width:100%!important;height:100%!important}
 .gc-chart-wrap{padding:14px 18px;border-top:1px solid var(--border)}
 .gc-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 
@@ -489,78 +491,7 @@ tr.inactive td{opacity:.35}
 .day-panel-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:22px}
 .day-panel-pct{font-family:var(--mono);font-size:.78rem}
 /* Responsive: 2 cols on mobile */
-@media(max-width:700px){.day-panel-cells{grid-template-columns:repeat(2,1fr)}}
-
-/* ── DAILY GOALS IMPORT (Metas tab) ── */
-.goals-daily-import{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px}
-.gdi-desc{font-size:.8rem;color:var(--muted);line-height:1.7;margin-bottom:12px}
-.gdi-desc code{background:var(--border);padding:1px 5px;border-radius:3px;font-size:.78rem;color:var(--text)}
-.gdi-table-wrap{overflow-x:auto;margin-bottom:4px}
-.gdi-table{width:100%;border-collapse:collapse;font-size:.8rem}
-.gdi-table th{text-align:left;color:var(--muted);font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-bottom:1px solid var(--border)}
-.gdi-table td{padding:7px 10px;border-bottom:1px solid rgba(42,42,42,.5)}
-.gdi-table tr:last-child td{border-bottom:none}
-.gdi-preview{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:12px}
-
 /* ── RESPONSIVE ── */
-
-/* Prize tier badges */
-.gbadge.ultra { background:rgba(180,130,255,.20); color:#c084fc; }
-.gbadge.mega  { background:rgba(250,200,80,.18);  color:#fbbf24; }
-.gbadge.super { background:rgba(100,210,255,.18); color:#38bdf8; }
-.gbadge.hit   { background:rgba(76,175,125,.18);  color:var(--success); }
-.gbadge.miss  { background:rgba(224,82,82,.12);   color:var(--danger); }
-/* Hint line below input */
-.gk-hint { font-size:.68rem; color:var(--muted); margin-top:3px; }
-/* Kiosk section label in overrides */
-.gk-kiosk-lbl { font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
-
-
-
-/* ── KIOSK SECTIONS (Quiosques panel) ── */
-.kiosk-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:12px}
-.ks-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px}
-.ks-name{font-size:1.1rem;color:var(--text)}
-.ks-sub{font-size:.68rem;color:var(--muted);letter-spacing:.05em;margin-top:3px}
-.ks-total{text-align:right;flex-shrink:0}
-.ks-total-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
-.ks-total-val{font-family:var(--mono);font-size:1.3rem;color:var(--text)}
-.ks-goals{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px}
-.ks-goal-item{background:var(--surface2);padding:12px 14px}
-.ks-goal-lbl{font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.ks-goal-n{opacity:.5;font-weight:400}
-.ks-goal-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px}
-.ks-goal-val{font-family:var(--mono);font-size:.9rem;color:var(--text)}
-.ks-goal-pct{font-family:var(--mono);font-size:.8rem}
-.ks-goal-sub{font-size:.65rem;color:var(--muted);margin-bottom:5px}
-.ks-goal-bar{height:2px;background:var(--border);border-radius:1px;overflow:hidden}
-.ks-goal-fill{height:100%;border-radius:1px;transition:width .7s}
-.ks-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px}
-.ks-stat{background:var(--surface2);padding:10px 12px}
-.ks-stat-l{font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
-.ks-stat-v{font-family:var(--mono);font-size:.88rem;color:var(--text)}
-.ks-sellers-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-.ks-sellers{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:8px}
-.ks-seller-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;transition:border-color .15s}
-.ks-seller-card:hover{border-color:#444}
-.ks-seller-card.inactive{opacity:.35}
-.ks-sc-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
-.ks-sc-name{font-size:.85rem;color:var(--text);flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
-.ks-sc-pcs{font-family:var(--mono);font-size:.72rem;color:var(--muted);flex-shrink:0}
-.ks-sc-goal{margin-top:6px}
-.ks-sc-goal-row{display:flex;justify-content:space-between;margin-bottom:3px}
-.ks-chart{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
-.ks-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-
-/* ── Prize tier badges ── */
-.gbadge.ultra{background:rgba(180,130,255,.20);color:#c084fc}
-.gbadge.mega {background:rgba(250,200,80,.18);color:#fbbf24}
-.gbadge.super{background:rgba(100,210,255,.18);color:#38bdf8}
-.gbadge.hit  {background:rgba(76,175,125,.18);color:var(--success)}
-.gbadge.miss {background:rgba(224,82,82,.12);color:var(--danger)}
-.gk-hint{font-size:.68rem;color:var(--muted);margin-top:3px}
-.gk-kiosk-lbl{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
-
 @media(max-width:1024px){
   .kpi-g{grid-template-columns:repeat(2,1fr)}
   .cr{grid-template-columns:1fr}
@@ -571,14 +502,27 @@ tr.inactive td{opacity:.35}
   .ks-sellers{grid-template-columns:1fr 1fr}
   .goals-grid{grid-template-columns:1fr}
 }
+@media(max-width:700px){
+  .day-panel-cells{grid-template-columns:repeat(2,1fr)}
+}
 @media(max-width:640px){
-  .topbar{padding:0 16px}
-  .logo{font-size:.72rem}
-  .tab{padding:0 12px;font-size:.7rem}
-  .pnl{padding:20px 16px 56px}
+  .topbar{padding:0 12px;gap:8px}
+  .logo{font-size:.65rem;letter-spacing:.15em;white-space:nowrap}
+  .tab{padding:0 10px;font-size:.68rem;white-space:nowrap}
+  .pnl{padding:16px 12px 56px}
+  .geral-filters{flex-direction:column;gap:8px}
+  .geral-filter-item{flex-direction:row;align-items:center;gap:8px}
+  .geral-month-sel{flex:1;width:100%}
+  .day-panel-header{flex-direction:column;align-items:flex-start;gap:10px}
+  .day-panel-date-wrap{width:100%}
+  .day-panel-date-wrap .geral-month-sel{width:100%}
+  .day-panel-row{padding:12px}
+  .day-panel-cells{grid-template-columns:repeat(2,1fr);gap:8px}
+  .day-panel-num-val{font-size:.72rem}
+  .day-panel-kname{font-size:.75rem;margin-bottom:8px}
   .kpi-g{grid-template-columns:1fr 1fr}
   .kpi-v{font-size:1.1rem}
-  .modal{width:calc(100% - 32px);padding:28px 20px}
+  .modal{width:calc(100% - 24px);padding:24px 16px}
   .kgoal{grid-template-columns:1fr}
   .ks-sellers{grid-template-columns:1fr}
   .ks-header{flex-direction:column;gap:8px}
@@ -592,111 +536,17 @@ tr.inactive td{opacity:.35}
   .gc-liq{text-align:left}
   .gc-sellers-head,.gc-seller-row{grid-template-columns:1fr auto 100px}
   .gc-seller-pcs,.gc-sellers-head span:nth-child(3){display:none}
+  .gc-agg-chart{padding:12px}
+  .gc-agg-chart canvas,.gc-chart-wrap canvas{height:auto!important;min-height:80px}
 }
-  .ks-goals{grid-template-columns:1fr}
-  .ks-stats{grid-template-columns:repeat(2,1fr)}
-  .ks-sellers{grid-template-columns:1fr}
-  .ks-header{flex-direction:column;gap:8px}
-  .ks-total{text-align:left}
-  .period-btn{font-size:.7rem;padding:0 10px}
+@media(max-width:420px){
+  .day-panel-cells{grid-template-columns:1fr}
+  .topbar{padding:0 10px}
+  .logo{font-size:.6rem;letter-spacing:.1em}
+  .tab{padding:0 8px;font-size:.62rem}
+  .gc-sellers-head,.gc-seller-row{grid-template-columns:1fr 90px}
+  .gc-seller-liq{display:none}
 }
-
-
-/* ── GERAL PANEL ─────────────────────────────────────── */
-.geral-header{
-  display:flex;align-items:center;justify-content:space-between;
-  flex-wrap:wrap;gap:12px;margin-bottom:20px;
-}
-.geral-period{display:flex;align-items:center;gap:10px}
-.geral-period-lbl{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.geral-select{
-  padding:0 36px 0 14px;height:36px;
-  background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
-  border:1px solid var(--border);border-radius:8px;
-  color:var(--text);font-family:var(--font);font-size:.88rem;
-  outline:none;cursor:pointer;transition:border-color .15s;
-  -webkit-appearance:none;appearance:none;
-}
-.geral-select:focus{border-color:#fff}
-
-/* ── KIOSK CARDS GRID ────────────────────────────────── */
-.kiosk-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-
-.kcard{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:12px;overflow:hidden;
-}
-
-/* Card header */
-.kcard-head{
-  display:flex;justify-content:space-between;align-items:flex-start;
-  padding:18px 20px 14px;border-bottom:1px solid var(--border);
-  gap:12px;
-}
-.kcard-name{font-size:1.05rem;color:var(--text);margin-bottom:2px}
-.kcard-sub{font-size:.68rem;letter-spacing:.05em;color:var(--muted)}
-.kcard-right{text-align:right;flex-shrink:0}
-.kcard-liq{font-family:var(--mono);font-size:1.4rem;color:var(--text);line-height:1}
-.kcard-liq-sub{font-size:.68rem;color:var(--muted);margin-top:3px}
-
-/* Monthly goal bar */
-.kcard-goal-bar{padding:10px 20px 0}
-.kcard-goal-row{display:flex;justify-content:space-between;align-items:center}
-
-/* Sellers table inside card */
-.kcard-sellers{padding:0}
-.kcard-table{width:100%;border-collapse:collapse;font-size:.82rem}
-.kcard-table th{
-  padding:8px 16px;font-family:var(--font);font-size:.62rem;
-  letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
-  text-align:left;border-bottom:1px solid var(--border);
-  background:var(--surface);font-weight:400;white-space:nowrap;
-}
-.kcard-table td{
-  padding:10px 16px;border-bottom:1px solid var(--border);
-  vertical-align:middle;
-}
-.kcard-table tr:last-child td{border-bottom:none}
-.kcard-table tr:hover td{background:var(--surface2)}
-.kcard-table tr.inactive td{opacity:.4}
-
-/* Weekly toggle */
-.kcard-weeks-toggle{
-  width:100%;padding:9px 20px;
-  background:var(--surface2);border:none;border-top:1px solid var(--border);
-  color:var(--muted);font-family:var(--font);font-size:.75rem;
-  letter-spacing:.04em;cursor:pointer;text-align:left;
-  transition:color .15s,background .15s;
-}
-.kcard-weeks-toggle:hover{color:var(--text);background:var(--border)}
-
-/* Weekly rows */
-.kcard-weeks{border-top:1px solid var(--border)}
-.kcard-week{
-  padding:12px 20px;border-bottom:1px solid var(--border);
-}
-.kcard-week:last-child{border-bottom:none}
-.kcard-week-head{
-  display:flex;align-items:center;gap:8px;margin-bottom:2px;
-}
-.kcard-week-lbl{font-size:.8rem;color:var(--text);flex:1}
-.kcard-week-liq{font-family:var(--mono);font-size:.82rem;color:var(--text)}
-.kcard-week-pct{font-family:var(--mono);font-size:.75rem;min-width:36px;text-align:right}
-
-/* Sellers inside week */
-.kcard-week-sellers{
-  display:flex;flex-direction:column;gap:4px;
-  margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
-}
-.kcard-week-seller{
-  display:flex;align-items:center;gap:6px;
-  font-size:.78rem;flex-wrap:wrap;
-}
-.kcard-week-sname{flex:1;color:var(--text);min-width:80px}
-.kcard-week-sliq{color:var(--muted)}
-.kcard-week-spct{font-family:var(--mono);font-size:.72rem;min-width:34px;text-align:right}
-
-
 </style>
 </head>
 <body>
@@ -1554,7 +1404,7 @@ function renderGeral() {
 
   h += `<div class="gc-agg-chart">
     <div class="gc-chart-lbl">Faturamento Líquido Diário · Todos os Quiosques</div>
-    <canvas id="gcd-all" height="60"></canvas>
+    <div class="gc-agg-chart-canvas-wrap"><canvas id="gcd-all"></canvas></div>
   </div>`;
   h += `<div class="geral-grid">`;
 
@@ -1711,7 +1561,7 @@ function renderGeral() {
       type: 'line',
       data: { labels: allDates.map(fmtDL), datasets },
       options: {
-        responsive: true, animation: false,
+        responsive: true, animation: false, maintainAspectRatio: false,
         plugins: {
           legend: { display: true, position: 'top',
             labels: { color:'#666', font:{family:'DM Mono',size:9}, boxWidth:10, padding:12 }
