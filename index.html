@@ -130,6 +130,8 @@ onAuthStateChanged(auth, async user => {
         }
         applyRoleUI(profile);
         closeAuthScreens();
+        // Force render — data may have arrived before profile was set
+        setTimeout(() => window.tryRender?.(), 100);
         return;
       }
       // Profile doc not found — user exists in Auth but not Firestore
@@ -985,6 +987,38 @@ window._isAdmin = false;
 // Proxy getters so all functions always read current state
 Object.defineProperty(window,'store',{get:()=>window._store,set:v=>{window._store=v;}});
 Object.defineProperty(window,'goals',{get:()=>window._goals,set:v=>{window._goals=v;}});
+
+// ── sanitizeGoals — clean data from Firestore ──────────
+function sanitizeGoals(g) {
+  if (!g) return { kiosks:{}, sellers:{} };
+  const isCorrupt = v => typeof v === 'string' && v.includes('${');
+  const cleanNum  = v => (isCorrupt(v) || isNaN(parseFloat(v))) ? 0 : parseFloat(v);
+  const cleanObj  = obj => {
+    if (!obj || typeof obj !== 'object') return {};
+    const out = {};
+    for (const [k,v] of Object.entries(obj)) {
+      if (isCorrupt(k)) continue;
+      out[k] = isCorrupt(v) ? 0 : (typeof v === 'number' ? v : (typeof v === 'object' ? cleanObj(v) : v));
+    }
+    return out;
+  };
+  const cleanKiosk = G => !G ? {} : ({
+    monthlyByMonth: cleanObj(G.monthlyByMonth||{}),
+    weeklyOverride: cleanObj(G.weeklyOverride||{}),
+    activeSellers:  Array.isArray(G.activeSellers) ? G.activeSellers.filter(s=>typeof s==='string'&&!isCorrupt(s)) : [],
+    dailyByDate:    cleanObj(G.dailyByDate||{}),
+  });
+  const cleanSeller = S => !S ? {} : ({
+    overrideMonthly: cleanObj(S.overrideMonthly||{}),
+    overrideWeekly:  cleanObj(S.overrideWeekly||{}),
+  });
+  return {
+    kiosks:    Object.fromEntries(Object.entries(g.kiosks||{}).map(([k,v]) => [k, cleanKiosk(v)])),
+    sellers:   Object.fromEntries(Object.entries(g.sellers||{}).map(([k,v]) => [k, cleanSeller(v)])),
+    inventory: g.inventory ? { targetDays: g.inventory.targetDays||30, stock: cleanObj(g.inventory.stock||{}) } : undefined,
+  };
+}
+window.sanitizeGoals = sanitizeGoals;
 
 // ── STATUS TOAST ──
 function showStatus(msg,cls='dim'){const el=document.getElementById('statusBar');el.textContent=msg;el.className='show '+(cls||'');}
@@ -3870,8 +3904,7 @@ function exportReposicao() {
 
 // ── tryRender — called by Firebase module when data changes ────────────────
 window.tryRender = function tryRender() {
-  if (!window._userProfile) return;  // not logged in yet
-  if (!document.getElementById('geralBody')) return;  // DOM not ready
+  if (!window._userProfile) return;
   try {
     const tab = document.querySelector('.pnl.on')?.id?.replace('pnl-','') || 'geral';
     if (tab === 'geral')        { renderGeral();        return; }
@@ -3879,7 +3912,7 @@ window.tryRender = function tryRender() {
     if (tab === 'consolidado')  { renderConsolidado();  return; }
     if (tab === 'premiacoes')   { renderPremiacoes();   return; }
     renderGeral();
-  } catch(e) { console.warn('tryRender:', e.message); }
+  } catch(e) { console.error('tryRender error:', e); }
 };
 
 // ── Re-render if Firebase snapshots already fired before this script loaded ──
