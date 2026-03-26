@@ -108,8 +108,9 @@ function sanitizeGoals(g) {
     };
   };
   return {
-    kiosks:  Object.fromEntries(Object.entries(g.kiosks||{}).map(([k,v]) => [k, cleanKiosk(v)])),
-    sellers: Object.fromEntries(Object.entries(g.sellers||{}).map(([k,v]) => [k, cleanSeller(v)])),
+    kiosks:    Object.fromEntries(Object.entries(g.kiosks||{}).map(([k,v]) => [k, cleanKiosk(v)])),
+    sellers:   Object.fromEntries(Object.entries(g.sellers||{}).map(([k,v]) => [k, cleanSeller(v)])),
+    inventory: g.inventory ? { targetDays: g.inventory.targetDays||30, stock: cleanObj(g.inventory.stock||{}) } : undefined,
   };
 }
 
@@ -348,7 +349,7 @@ tr.inactive td{opacity:.35}
 /* MODAL */
 .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.80);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center}
 .ov.show{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px;width:360px;position:relative}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;width:min(680px,calc(100vw - 32px));position:relative;max-height:85vh;overflow-y:auto}
 .modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 28px}
 .mt{font-size:1.15rem;margin-bottom:4px}.ms2{font-size:.75rem;color:var(--muted);margin-bottom:28px}
 .fld{margin-bottom:16px}
@@ -532,18 +533,37 @@ tr.inactive td{opacity:.35}
 .sku-kiosk-hint{font-size:.65rem;color:var(--muted);margin-left:5px;opacity:.6}
 
 /* ── ESTOQUE MODULE ── */
-.est-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
-.est-search-wrap{flex:1;min-width:200px}
+.est-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.est-search-wrap{flex:1;min-width:180px}
 .est-search{width:100%;height:36px;padding:0 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:.85rem;outline:none;transition:border-color .15s}
 .est-search:focus{border-color:#555}
-.est-count{font-size:.72rem;color:var(--muted);white-space:nowrap}
-.est-th{font-size:.65rem;letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;color:var(--muted);user-select:none}
+.est-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px}
+.est-kpi{background:var(--surface2);padding:10px 14px;text-align:center}
+.est-kpi-n{font-family:var(--mono);font-size:1.2rem;margin-bottom:2px}
+.est-kpi-l{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.est-th{font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;color:var(--muted);user-select:none;white-space:nowrap}
 .est-th:hover{color:var(--text)}
 .est-row:hover{background:var(--surface2)}
-.est-sku{font-family:var(--mono);font-size:.8rem;white-space:nowrap;padding:8px 12px}
-.est-desc{font-size:.82rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 12px}
+.sku-code{font-family:var(--mono);font-size:.78rem;white-space:nowrap;padding:8px 12px;color:var(--muted)}
+.est-desc{font-size:.82rem;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 12px}
 .est-num{font-family:var(--mono);font-size:.82rem;padding:8px 12px}
+.est-stock-edit{cursor:pointer;border-bottom:1px dashed rgba(96,165,250,.4)}
+.est-stock-edit:hover{border-color:#60a5fa}
+/* Detail row */
+.est-detail{padding:14px 16px;background:rgba(255,255,255,.015)}
+.est-kiosk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:10px}
+.est-kiosk-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px}
+.est-kiosk-name{font-size:.75rem;letter-spacing:.05em;color:var(--text);margin-bottom:10px}
+.est-kiosk-nums{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+.est-kn{}
+.est-kn-l{font-size:.58rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.est-kn-v{font-family:var(--mono);font-size:.82rem;color:var(--text)}
+.est-inline-input{width:60px;background:transparent;border:none;border-bottom:1px solid var(--border);color:#60a5fa;font-family:var(--mono);font-size:.82rem;padding:1px 2px;outline:none;text-align:right}
+.est-inline-input:focus{border-color:#60a5fa}
 .es{font-size:.8rem;color:var(--muted);margin-top:6px}
+@media(max-width:640px){.est-kpis{grid-template-columns:repeat(3,1fr)}}
+
+/* ── SKU TABLE ── */
 
 /* ── KIOSK SECTIONS (Quiosques panel) ── */
 .kiosk-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:12px}
@@ -3084,18 +3104,35 @@ async function processAnalyticCSV() {
 }
 
 // ══════════════════════════════════════════════════════════
-//  RENDER ESTOQUE  
+//  ESTOQUE MODULE — Gestão de Reposição
 // ══════════════════════════════════════════════════════════
-let estoqueFilter   = '';        // search string
-let estoqueSortCol  = 'sold';    // sold | revenue | returns | sku | desc
-let estoqueSortAsc  = false;
 
-function setEstoqueFilter(v) { estoqueFilter = v; renderEstoque(); }
-function setEstoqueSort(col) {
+// State
+let estoqueFilter    = '';
+let estoqueSortCol   = 'status';   // status|sku|desc|velocity|diasEst|reorder
+let estoqueSortAsc   = false;
+let estoqueKiosk     = '';         // '' = all, or kiosk name
+let estoqueOnlyCrit  = false;      // show only critical/low
+let estoqueTargetDays = 30;        // target days of stock to maintain
+
+// Inventory config stored in goals.inventory = {
+//   targetDays: number,
+//   stock: { [sku]: { [kiosk]: { atual: number, padrao: number } } }
+// }
+
+function getInventory() {
+  return goals.inventory || { targetDays: 30, stock: {} };
+}
+
+function setEstoqueFilter(v)    { estoqueFilter = v; renderEstoque(); }
+function setEstoqueSort(col)    {
   if (estoqueSortCol === col) estoqueSortAsc = !estoqueSortAsc;
-  else { estoqueSortCol = col; estoqueSortAsc = false; }
+  else { estoqueSortCol = col; estoqueSortAsc = col==='sku'||col==='desc'; }
   renderEstoque();
 }
+function setEstoqueKiosk(v)     { estoqueKiosk = v; renderEstoque(); }
+function setEstoqueOnlyCrit(v)  { estoqueOnlyCrit = v; renderEstoque(); }
+function setEstoqueTargetDays(v){ estoqueTargetDays = parseInt(v)||30; renderEstoque(); }
 
 function renderEstoque() {
   const el = document.getElementById('estoqueBody');
@@ -3103,90 +3140,319 @@ function renderEstoque() {
   const analytics = window._analytics;
   if (!analytics?.skus || !Object.keys(analytics.skus).length) {
     el.innerHTML = `<div class="empty">
-      <div class="ei">○</div>
-      <div class="et">Nenhum dado analítico</div>
-      <div class="es">Importe um relatório no formato analítico (PDV_ANALITICO) na aba Importar</div>
+      <div class="ei">○</div><div class="et">Nenhum dado analítico</div>
+      <div class="es">Importe o relatório Analítico (VENDEDOR.RPT) na aba Importar</div>
     </div>`;
     return;
   }
 
-  const ks = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
-  const skus = Object.entries(analytics.skus);
+  const inv = getInventory();
+  const ks  = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  const skusAll = Object.entries(analytics.skus);
+  const dateRange = store.dateRange||[];
+  const nDays = Math.max(1, dateRange.length);  // days with data
+
+  // Build enriched SKU list
+  const enriched = skusAll.map(([sku, s]) => {
+    const kList = estoqueKiosk ? [estoqueKiosk] : ks;
+    let totalSold=0, totalDays=0;
+    const byKiosk = {};
+    kList.forEach(kn => {
+      const kb      = s.byKiosk?.[kn]||{};
+      const sold    = kb.sold||0;
+      const atual   = inv.stock?.[sku]?.[kn]?.atual ?? null;
+      const padrao  = inv.stock?.[sku]?.[kn]?.padrao ?? null;
+      const velocity= sold / nDays;   // units/day for this kiosk
+      const diasEst = (atual !== null && velocity > 0) ? atual/velocity : null;
+      const reorder = (padrao !== null && atual !== null) ? Math.max(0, padrao - atual) : null;
+      byKiosk[kn] = { sold, atual, padrao, velocity, diasEst, reorder };
+      totalSold += sold;
+    });
+    const velocity = totalSold / nDays;
+    // Aggregate atual/diasEst across kiosks
+    const atualArr  = kList.map(kn=>byKiosk[kn].atual).filter(v=>v!==null);
+    const totalAtual = atualArr.length ? atualArr.reduce((a,b)=>a+b,0) : null;
+    const diasEst    = totalAtual !== null && velocity > 0 ? totalAtual/velocity : null;
+    const reorderArr = kList.map(kn=>byKiosk[kn].reorder).filter(v=>v!==null);
+    const totalReorder = reorderArr.length ? reorderArr.reduce((a,b)=>a+b,0) : null;
+
+    // Status
+    let status = 'ok';
+    if (diasEst !== null) {
+      if (diasEst < 7)  status = 'critical';
+      else if (diasEst < 14) status = 'low';
+    } else if (totalAtual === null) {
+      status = 'unset';
+    }
+
+    return { sku, s, totalSold, velocity, totalAtual, diasEst, totalReorder, status, byKiosk };
+  });
 
   // Filter
   const q = estoqueFilter.toLowerCase();
-  let filtered = q
-    ? skus.filter(([sku,s]) => sku.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q))
-    : skus;
+  let filtered = enriched.filter(e => {
+    if (q && !e.sku.toLowerCase().includes(q) && !e.s.desc.toLowerCase().includes(q)) return false;
+    if (estoqueOnlyCrit && e.status !== 'critical' && e.status !== 'low') return false;
+    return true;
+  });
 
   // Sort
   const sortFns = {
-    sold:    ([,a],[,b]) => b.totalSold    - a.totalSold,
-    revenue: ([,a],[,b]) => b.revenue      - a.revenue,
-    returns: ([,a],[,b]) => b.totalReturned- a.totalReturned,
-    sku:     ([a],[b])   => a.localeCompare(b),
-    desc:    ([,a],[,b]) => a.desc.localeCompare(b.desc),
-    net:     ([,a],[,b]) => (b.totalSold-b.totalReturned)-(a.totalSold-a.totalReturned),
+    status:   (a,b) => { const ord={critical:0,low:1,ok:2,unset:3}; return (ord[a.status]||3)-(ord[b.status]||3); },
+    sku:      (a,b) => a.sku.localeCompare(b.sku),
+    desc:     (a,b) => a.s.desc.localeCompare(b.s.desc),
+    velocity: (a,b) => b.velocity - a.velocity,
+    diasEst:  (a,b) => { if(a.diasEst===null&&b.diasEst===null) return 0; if(a.diasEst===null) return 1; if(b.diasEst===null) return -1; return a.diasEst-b.diasEst; },
+    sold:     (a,b) => b.totalSold - a.totalSold,
+    reorder:  (a,b) => (b.totalReorder||0) - (a.totalReorder||0),
   };
-  filtered.sort(sortFns[estoqueSortCol]||sortFns.sold);
+  filtered.sort(sortFns[estoqueSortCol]||sortFns.status);
   if (estoqueSortAsc) filtered.reverse();
 
-  // Build KPI summary
-  const totalSold     = skus.reduce((s,[,v])=>s+v.totalSold,0);
-  const totalRevenue  = skus.reduce((s,[,v])=>s+v.revenue,0);
-  const totalReturned = skus.reduce((s,[,v])=>s+v.totalReturned,0);
-  const totalSkus     = skus.length;
+  // Metrics
+  const totalSkus      = filtered.length;
+  const criticalCount  = filtered.filter(e=>e.status==='critical').length;
+  const lowCount       = filtered.filter(e=>e.status==='low').length;
+  const unsetCount     = filtered.filter(e=>e.status==='unset').length;
+  const si = a => a===estoqueSortCol?(estoqueSortAsc?'↑':'↓'):'';
 
-  let h = `<div class="kpi-g" style="margin-bottom:16px">
-    <div class="kpi"><div class="kpi-l">SKUs únicos</div><div class="kpi-v">${totalSkus}</div></div>
-    <div class="kpi"><div class="kpi-l">Unidades vendidas</div><div class="kpi-v">${totalSold.toLocaleString('pt-BR')}</div></div>
-    <div class="kpi"><div class="kpi-l">Faturamento (SKU)</div><div class="kpi-v">${R(totalRevenue)}</div></div>
-    <div class="kpi"><div class="kpi-l">Devoluções</div><div class="kpi-v">${totalReturned.toLocaleString('pt-BR')}</div></div>
-  </div>`;
+  let h = '';
 
-  // Search + sort toolbar
-  const sortIcon = col => estoqueSortCol===col ? (estoqueSortAsc?'↑':'↓') : '';
+  // ── Toolbar ──────────────────────────────────────────
   h += `<div class="est-toolbar">
     <div class="est-search-wrap">
       <input class="est-search" type="text" placeholder="Buscar SKU ou produto…"
         value="${estoqueFilter}" oninput="setEstoqueFilter(this.value)">
     </div>
-    <div class="est-count">${filtered.length} de ${totalSkus} produtos</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select class="geral-month-sel" onchange="setEstoqueKiosk(this.value)" style="height:36px">
+        <option value="">Todos os quiosques</option>
+        ${ks.map(kn=>`<option value="${kn}"${estoqueKiosk===kn?' selected':''}>${sK(kn)}</option>`).join('')}
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted);cursor:pointer;white-space:nowrap">
+        <input type="checkbox" ${estoqueOnlyCrit?'checked':''} onchange="setEstoqueOnlyCrit(this.checked)">
+        Críticos e baixos
+      </label>
+      <div style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted);white-space:nowrap">
+        Meta
+        <input type="number" value="${estoqueTargetDays}" min="1" max="365"
+          onchange="setEstoqueTargetDays(this.value)"
+          style="width:52px;height:28px;padding:0 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.8rem;text-align:center">
+        dias
+      </div>
+      <button class="btn-secondary" onclick="exportReposicao()" style="height:36px;padding:0 14px;font-size:.78rem">
+        ↓ Exportar reposição
+      </button>
+    </div>
   </div>`;
 
-  // Table
-  h += `<div class="tw tw-scroll"><table>
+  // ── KPI strip ─────────────────────────────────────────
+  h += `<div class="est-kpis">
+    <div class="est-kpi"><div class="est-kpi-n">${totalSkus}</div><div class="est-kpi-l">SKUs</div></div>
+    <div class="est-kpi" style="color:var(--danger)"><div class="est-kpi-n">${criticalCount}</div><div class="est-kpi-l">Crítico <7d</div></div>
+    <div class="est-kpi" style="color:#f59e0b"><div class="est-kpi-n">${lowCount}</div><div class="est-kpi-l">Baixo <14d</div></div>
+    <div class="est-kpi" style="color:var(--muted)"><div class="est-kpi-n">${unsetCount}</div><div class="est-kpi-l">Sem estoque</div></div>
+    <div class="est-kpi"><div class="est-kpi-n">${nDays}</div><div class="est-kpi-l">Dias de dados</div></div>
+  </div>`;
+
+  // ── Table ─────────────────────────────────────────────
+  h += `<div class="tw tw-scroll" style="margin-top:12px"><table>
     <thead><tr>
-      <th class="est-th" onclick="setEstoqueSort('sku')" style="cursor:pointer">SKU ${sortIcon('sku')}</th>
-      <th class="est-th" onclick="setEstoqueSort('desc')" style="cursor:pointer">Produto ${sortIcon('desc')}</th>
-      <th class="est-th num" onclick="setEstoqueSort('sold')" style="cursor:pointer">Vendas ${sortIcon('sold')}</th>
-      <th class="est-th num" onclick="setEstoqueSort('returns')" style="cursor:pointer">Dev. ${sortIcon('returns')}</th>
-      <th class="est-th num" onclick="setEstoqueSort('net')" style="cursor:pointer">Líquido ${sortIcon('net')}</th>
-      <th class="est-th num" onclick="setEstoqueSort('revenue')" style="cursor:pointer">Receita ${sortIcon('revenue')}</th>
-      ${ks.map(kn=>`<th class="est-th num" style="font-size:.6rem">${sK(kn)}</th>`).join('')}
+      <th class="est-th" onclick="setEstoqueSort('status')" style="width:8px"></th>
+      <th class="est-th" onclick="setEstoqueSort('sku')" style="cursor:pointer">SKU ${si('sku')}</th>
+      <th class="est-th" onclick="setEstoqueSort('desc')" style="cursor:pointer">Produto ${si('desc')}</th>
+      <th class="est-th num" onclick="setEstoqueSort('sold')" style="cursor:pointer">Vendas ${si('sold')}</th>
+      <th class="est-th num" onclick="setEstoqueSort('velocity')" style="cursor:pointer">Un./dia ${si('velocity')}</th>
+      <th class="est-th num" style="color:#60a5fa" onclick="setEstoqueSort('diasEst')" >Dias Est. ${si('diasEst')}</th>
+      <th class="est-th num" style="color:#60a5fa">Est. Atual</th>
+      <th class="est-th num">Meta ${estoqueTargetDays}d</th>
+      <th class="est-th num" style="color:#34d399" onclick="setEstoqueSort('reorder')">Repor ${si('reorder')}</th>
+      ${estoqueKiosk ? '' : `<th class="est-th" style="width:32px"></th>`}
     </tr></thead><tbody>`;
 
-  for (const [sku, s] of filtered) {
-    const net = s.totalSold - s.totalReturned;
-    const avgPrice = s.totalSold>0 ? s.revenue/s.totalSold : 0;
-    h += `<tr class="est-row">
-      <td class="est-sku">${sku}</td>
-      <td class="est-desc" title="${s.desc}">${s.desc}</td>
-      <td class="num est-num">${s.totalSold}</td>
-      <td class="num est-num" style="color:${s.totalReturned>0?'var(--danger)':'var(--muted)'}">${s.totalReturned||'—'}</td>
-      <td class="num est-num" style="color:${net>0?'var(--success)':'var(--muted)'}">${net}</td>
-      <td class="num est-num mo">${R(s.revenue)}</td>
-      ${ks.map(kn=>{
-        const kb = s.byKiosk[kn];
-        return `<td class="num est-num" style="font-size:.78rem">${kb?.sold||'—'}</td>`;
-      }).join('')}
+  filtered.forEach((e, idx) => {
+    const detId = `ed-${idx}`;
+    const statusDot = {critical:'🔴',low:'🟡',ok:'🟢',unset:'⚪'}[e.status]||'⚪';
+    const metaEst = e.velocity > 0 ? Math.ceil(e.velocity * estoqueTargetDays) : null;
+    const diasColor = e.diasEst !== null
+      ? (e.diasEst < 7 ? 'var(--danger)' : e.diasEst < 14 ? '#f59e0b' : 'var(--success)')
+      : 'var(--muted)';
+
+    h += `<tr class="est-row" onclick="toggleEstoqueDetail('${detId}')" style="cursor:pointer">
+      <td style="text-align:center;font-size:.7rem">${statusDot}</td>
+      <td class="sku-code">${e.sku}</td>
+      <td class="est-desc">${e.s.desc}</td>
+      <td class="num est-num">${e.totalSold}</td>
+      <td class="num est-num">${e.velocity >= 0.1 ? e.velocity.toFixed(1) : e.velocity > 0 ? '<0.1' : '—'}</td>
+      <td class="num est-num" style="color:${diasColor};font-weight:600">
+        ${e.diasEst !== null ? e.diasEst.toFixed(0)+'d' : '—'}
+      </td>
+      <td class="num est-num" style="color:#60a5fa">
+        <span class="est-stock-edit" onclick="event.stopPropagation();openStockEdit('${e.sku}','${estoqueKiosk||''}',${idx})">
+          ${e.totalAtual !== null ? e.totalAtual : '<span style="color:var(--muted);font-size:.72rem">+ definir</span>'}
+        </span>
+      </td>
+      <td class="num est-num">${metaEst !== null ? metaEst : '—'}</td>
+      <td class="num est-num" style="color:${(e.totalReorder||0)>0?'#34d399':'var(--muted)'}">
+        ${e.totalReorder !== null ? (e.totalReorder > 0 ? `<strong>${e.totalReorder}</strong>` : '✓') : '—'}
+      </td>
+      ${estoqueKiosk ? '' : `<td style="text-align:center;font-size:.7rem;color:var(--muted)">▸</td>`}
+    </tr>
+    <tr id="${detId}" style="display:none">
+      <td colspan="10" style="padding:0">
+        <div class="est-detail" id="${detId}-inner"></div>
+      </td>
     </tr>`;
-  }
+  });
 
   h += `</tbody></table></div>`;
-  h += `<div class="meta-line">Analítico: ${analytics.importedAt||'—'} · ${analytics.period||''}</div>`;
+  h += `<div class="meta-line">Período: ${analytics.period||'—'} · Velocidade baseada em ${nDays} dias de dados</div>`;
   el.innerHTML = h;
 }
+
+function toggleEstoqueDetail(detId) {
+  const row   = document.getElementById(detId);
+  const inner = document.getElementById(detId+'-inner');
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  if (open) { row.style.display = 'none'; return; }
+  row.style.display = '';
+
+  const inv = getInventory();
+  const ks  = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  // Find the SKU from the sibling row
+  const sku = row.previousElementSibling?.cells?.[1]?.textContent?.trim();
+  if (!sku) return;
+  const s = window._analytics?.skus?.[sku];
+  if (!s) { inner.innerHTML = '<div style="padding:12px;color:var(--muted)">Sem dados</div>'; return; }
+
+  const dateRange = store.dateRange||[];
+  const nDays = Math.max(1, dateRange.length);
+
+  let h = `<div class="est-kiosk-grid">`;
+  ks.forEach(kn => {
+    const kb      = s.byKiosk?.[kn]||{};
+    const sold    = kb.sold||0;
+    const velocity= sold/nDays;
+    const atual   = inv.stock?.[sku]?.[kn]?.atual ?? null;
+    const padrao  = inv.stock?.[sku]?.[kn]?.padrao ?? null;
+    const diasEst = atual !== null && velocity > 0 ? atual/velocity : null;
+    const metaEst = velocity > 0 ? Math.ceil(velocity * estoqueTargetDays) : null;
+    const reorder = padrao !== null && atual !== null ? Math.max(0, padrao - atual) : null;
+    const statusColor = diasEst === null ? 'var(--muted)' : diasEst < 7 ? 'var(--danger)' : diasEst < 14 ? '#f59e0b' : 'var(--success)';
+    const kc = KC[ks.indexOf(kn)%KC.length];
+
+    h += `<div class="est-kiosk-card" style="border-top:2px solid ${kc.line}">
+      <div class="est-kiosk-name">${sK(kn)}</div>
+      <div class="est-kiosk-nums">
+        <div class="est-kn"><div class="est-kn-l">Vendas</div><div class="est-kn-v">${sold}</div></div>
+        <div class="est-kn"><div class="est-kn-l">Un./dia</div><div class="est-kn-v">${velocity>=0.1?velocity.toFixed(1):velocity>0?'<0.1':'—'}</div></div>
+        <div class="est-kn"><div class="est-kn-l">Est. Atual</div>
+          <div class="est-kn-v" style="color:#60a5fa">
+            <input class="est-inline-input" type="number" min="0"
+              value="${atual !== null ? atual : ''}" placeholder="—"
+              onchange="setStockValue('${sku}','${kn}','atual',this.value)"
+              onclick="event.stopPropagation()">
+          </div>
+        </div>
+        <div class="est-kn"><div class="est-kn-l">Padrão</div>
+          <div class="est-kn-v" style="color:var(--muted)">
+            <input class="est-inline-input" type="number" min="0"
+              value="${padrao !== null ? padrao : ''}" placeholder="—"
+              onchange="setStockValue('${sku}','${kn}','padrao',this.value)"
+              onclick="event.stopPropagation()">
+          </div>
+        </div>
+        <div class="est-kn"><div class="est-kn-l">Dias Est.</div><div class="est-kn-v" style="color:${statusColor}">${diasEst!==null?diasEst.toFixed(0)+'d':'—'}</div></div>
+        <div class="est-kn"><div class="est-kn-l">Meta ${estoqueTargetDays}d</div><div class="est-kn-v">${metaEst!==null?metaEst:'—'}</div></div>
+        <div class="est-kn"><div class="est-kn-l">Repor</div><div class="est-kn-v" style="color:${reorder&&reorder>0?'#34d399':'var(--muted)'}">${reorder!==null?(reorder>0?reorder:'✓'):'—'}</div></div>
+        ${kb.returned?`<div class="est-kn"><div class="est-kn-l">Devol.</div><div class="est-kn-v" style="color:var(--danger)">${kb.returned}</div></div>`:''}
+      </div>
+    </div>`;
+  });
+  h += `</div><div style="padding:6px 0 2px;text-align:right">
+    <button class="btn-primary" style="height:30px;padding:0 14px;font-size:.75rem" onclick="saveInventory()">Salvar estoque</button>
+  </div>`;
+  inner.innerHTML = h;
+}
+
+// Stock editing
+let _pendingStock = {};
+function setStockValue(sku, kiosk, field, val) {
+  const v = parseFloat(val);
+  if (!_pendingStock[sku]) _pendingStock[sku] = {};
+  if (!_pendingStock[sku][kiosk]) _pendingStock[sku][kiosk] = {};
+  _pendingStock[sku][kiosk][field] = isNaN(v) ? null : Math.round(v);
+}
+
+async function saveInventory() {
+  if (!Object.keys(_pendingStock).length) return;
+  showStatus('Salvando estoque…', 'dim');
+  try {
+    if (!goals.inventory) goals.inventory = { targetDays: estoqueTargetDays, stock: {} };
+    // Merge pending into goals.inventory.stock
+    for (const [sku, kiosks] of Object.entries(_pendingStock)) {
+      if (!goals.inventory.stock[sku]) goals.inventory.stock[sku] = {};
+      for (const [kn, vals] of Object.entries(kiosks)) {
+        if (!goals.inventory.stock[sku][kn]) goals.inventory.stock[sku][kn] = {};
+        Object.assign(goals.inventory.stock[sku][kn], vals);
+      }
+    }
+    goals.inventory.targetDays = estoqueTargetDays;
+    await saveAllGoals();
+    _pendingStock = {};
+    toast('Estoque salvo ✓', 'ok');
+    renderEstoque();
+  } catch(e) {
+    showStatus('Erro: '+e.message, 'err');
+  }
+}
+
+function openStockEdit(sku, kiosk, idx) {
+  // Expand the detail row inline instead of a popup
+  const detId = `ed-${idx}`;
+  const row = document.getElementById(detId);
+  if (row) {
+    if (row.style.display === 'none') {
+      toggleEstoqueDetail(detId);
+    }
+    row.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+}
+
+// Export replenishment list as CSV
+function exportReposicao() {
+  const analytics = window._analytics;
+  if (!analytics?.skus) return;
+  const inv = getInventory();
+  const ks  = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  const dateRange = store.dateRange||[];
+  const nDays = Math.max(1, dateRange.length);
+
+  let csv = 'SKU,Produto,Quiosque,Velocidade (un/dia),Estoque Atual,Estoque Padrão,Dias Estoque,Meta '+estoqueTargetDays+'d,Repor\n';
+  Object.entries(analytics.skus).forEach(([sku,s]) => {
+    ks.forEach(kn => {
+      const kb    = s.byKiosk?.[kn]||{};
+      const sold  = kb.sold||0;
+      if (!sold) return;
+      const vel   = (sold/nDays).toFixed(2);
+      const atual = inv.stock?.[sku]?.[kn]?.atual ?? '';
+      const pad   = inv.stock?.[sku]?.[kn]?.padrao ?? '';
+      const diasE = atual !== '' && parseFloat(vel) > 0 ? (parseFloat(atual)/parseFloat(vel)).toFixed(0) : '';
+      const meta  = parseFloat(vel) > 0 ? Math.ceil(parseFloat(vel)*estoqueTargetDays) : '';
+      const repor = pad !== '' && atual !== '' ? Math.max(0, parseFloat(pad)-parseFloat(atual)) : '';
+      csv += `"${sku}","${s.desc}","${sK(kn)}",${vel},${atual},${pad},${diasE},${meta},${repor}\n`;
+    });
+  });
+
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `reposicao_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+
 
 
 // ── Re-render if Firebase snapshots already fired before this script loaded ──
