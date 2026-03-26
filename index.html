@@ -452,6 +452,18 @@ tr.inactive td{opacity:.35}
 .gc-week-sellers .gc-seller-row{padding:6px 0;border-top:1px solid rgba(42,42,42,.3);font-size:.8rem}
 .gc-week-sellers .gc-seller-row:first-child{border-top:none}
 
+/* ── DAILY PANEL (abertura de dia) ── */
+.gc-daily{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.gc-daily-col{background:var(--surface2);padding:12px 18px}
+.gc-daily-lbl{font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.gc-daily-val{font-family:var(--mono);font-size:1.05rem;margin-bottom:3px}
+.gc-daily-sub{font-size:.72rem;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:3px}
+
+/* ── CHART WRAPPERS ── */
+.gc-agg-chart{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:12px}
+.gc-chart-wrap{padding:14px 18px;border-top:1px solid var(--border)}
+.gc-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+
 /* ── RESPONSIVE ── */
 
 /* Prize tier badges */
@@ -819,6 +831,13 @@ function log(msg,cls='dim'){const l=document.getElementById('logbox');const d=do
 const R=v=>'R$\u00a0'+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const sK=n=>n.replace('QUIOSQUE ','').replace(' SHOPPING','').replace(' PLAZA','').replace(/\s+/g,' ').trim();
 const CLRS=['rgba(255,255,255,.90)','rgba(255,255,255,.65)','rgba(255,255,255,.42)','rgba(255,255,255,.25)'];
+// Per-kiosk accent colors (chart lines + card accents)
+const KC = [
+  { line:'#60a5fa', fill:'rgba(96,165,250,.12)',  border:'rgba(96,165,250,.25)'  },  // blue
+  { line:'#34d399', fill:'rgba(52,211,153,.12)',  border:'rgba(52,211,153,.25)'  },  // green
+  { line:'#f59e0b', fill:'rgba(245,158,11,.12)',  border:'rgba(245,158,11,.25)'  },  // amber
+  { line:'#f472b6', fill:'rgba(244,114,182,.12)', border:'rgba(244,114,182,.25)' },  // pink
+];
 let chartInstances={};
 function destroyChart(id){if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}}
 
@@ -1272,6 +1291,33 @@ function toggleGeralWeeks(kName) {
 // ══════════════════════════════════════════════════════════
 //  RENDER GERAL
 // ══════════════════════════════════════════════════════════
+// ── Daily goal helpers ──────────────────────────────
+function kioskDailyGoal(kName) {
+  return goals.kiosks[kName]?.dailyGoal || 0;
+}
+function todayKey() {
+  return new Date().toISOString().slice(0,10);
+}
+function yesterdayKey() {
+  const d = new Date(); d.setDate(d.getDate()-1);
+  return d.toISOString().slice(0,10);
+}
+function kioskDayLiq(kName, dateKey) {
+  return (store.kiosks[kName]?.byDate?.[dateKey]?.liq) || 0;
+}
+function dailyPrizeBadge(pct) {
+  if (pct >= 160) return {label:'Ultra', cls:'ultra'};
+  if (pct >= 140) return {label:'Mega',  cls:'mega'};
+  if (pct >= 120) return {label:'Super', cls:'super'};
+  if (pct >= 100) return {label:'Meta',  cls:'hit'};
+  return null;
+}
+function fmtDateBR(dateKey) {
+  if (!dateKey) return '';
+  const [y,m,d] = dateKey.split('-');
+  return d+'/'+m;
+}
+
 // ── Painel Geral — estado ──
 let geralPeriod = null;  // YYYY-MM
 let geralWeek   = null;  // YYYY-MM-DD (monKey) ou null = mês completo
@@ -1345,9 +1391,14 @@ function renderGeral() {
   h += `</div>`;  // geral-filters
 
   // ── Kiosk cards ──────────────────────────────────────
+  h += `<div class="gc-agg-chart">
+    <div class="gc-chart-lbl">Faturamento Líquido Diário · Todos os Quiosques</div>
+    <canvas id="gcd-all" height="120"></canvas>
+  </div>`;
   h += `<div class="geral-grid">`;
 
   ks.forEach((k, ki) => {
+    const kc = KC[ki % KC.length];  // accent color for this kiosk
     const kName   = k.name;
     const active  = activeSellers(kName);
     const nActive = active.length || Object.keys(k.sellers).length;
@@ -1367,7 +1418,7 @@ function renderGeral() {
     }
     kPct = kGoal>0 ? (kLiq/kGoal)*100 : 0;
 
-    h += `<div class="gc-card">
+    h += `<div class="gc-card" style="border-color:${kc.border}">
       <div class="gc-head">
         <div>
           <div class="gc-name">${sK(kName)}</div>
@@ -1381,6 +1432,51 @@ function renderGeral() {
 
     if (kGoal) {
       h += `<div class="gc-bar-wrap"><div class="gc-bar"><div class="gc-fill" style="width:${Math.min(kPct,100)}%;background:${gColor(kPct)}"></div></div></div>`;
+    }
+
+    // ── Daily panel: yesterday result + today goal ──────
+    const todayK     = todayKey();
+    const yestK      = yesterdayKey();
+    const dGoal      = kioskDailyGoal(kName);
+    const yestLiq    = kioskDayLiq(kName, yestK);
+    const todayLiq   = kioskDayLiq(kName, todayK);
+    const superGoal  = dGoal * 1.2;
+    const yPct       = dGoal>0 ? (yestLiq/dGoal)*100 : 0;
+    const tPct       = dGoal>0 ? (todayLiq/dGoal)*100 : 0;
+    const yBadge     = dGoal>0 ? dailyPrizeBadge(yPct) : null;
+    const hasYest    = yestLiq > 0;
+    const hasToday   = todayLiq > 0;
+
+    if (dGoal || hasYest || hasToday) {
+      h += `<div class="gc-daily">`;
+
+      // Yesterday result
+      if (hasYest || dGoal) {
+        const yColor = dGoal>0 ? gColor(yPct) : 'var(--muted)';
+        h += `<div class="gc-daily-col">
+          <div class="gc-daily-lbl">${fmtDateBR(yestK)} · Ontem</div>
+          <div class="gc-daily-val" style="color:${yColor}">${R(yestLiq)}</div>
+          <div class="gc-daily-sub">
+            ${dGoal ? `meta ${R(dGoal)}` : ''}
+            ${dGoal ? `<span style="color:${yColor};margin-left:4px">${floorPct(yPct)}%</span>` : ''}
+            ${yBadge ? `<span class="gbadge ${yBadge.cls}" style="margin-left:4px">${yBadge.label}</span>` : ''}
+          </div>
+        </div>`;
+      }
+
+      // Today goal
+      if (dGoal) {
+        h += `<div class="gc-daily-col">
+          <div class="gc-daily-lbl">${fmtDateBR(todayK)} · Hoje</div>
+          ${hasToday
+            ? `<div class="gc-daily-val" style="color:${gColor(tPct)}">${R(todayLiq)}</div>
+               <div class="gc-daily-sub">meta ${R(dGoal)} · <span style="color:${gColor(tPct)}">${floorPct(tPct)}%</span></div>`
+            : `<div class="gc-daily-val">${R(dGoal)}</div>
+               <div class="gc-daily-sub">meta · super ${R(superGoal)}</div>`}
+        </div>`;
+      }
+
+      h += `</div>`;  // gc-daily
     }
 
     // ── Seller rows (no prize badges) ──────────────────
@@ -1464,13 +1560,85 @@ function renderGeral() {
 
     // Card footer: last sale date per kiosk
     const lastSale = kioskLastSale(kName);
-    h += `${lastSale?`<div class="gc-last-sale">Última venda: ${lastSale}</div>`:''}`;
+    // ── Daily chart per kiosk ──────────────────────────
+    const cId = 'gcd-'+ki;
+    h += `${lastSale?`<div class="gc-last-sale">Última venda: ${lastSale}</div>`:''}
+    <div class="gc-chart-wrap">
+      <div class="gc-chart-lbl">Faturamento Líquido Diário</div>
+      <canvas id="${cId}" height="70"></canvas>
+    </div>`;
     h += `</div>`;  // gc-card
   });
 
   h += `</div>`;  // geral-grid
   document.getElementById('geralBody').innerHTML = h;
   destroyChart('cBar'); destroyChart('cPie');
+
+  // ── Aggregate chart (all kiosks, one line each) ──
+  const aggId = 'gcd-all';
+  destroyChart(aggId);
+  const aggCanvas = document.getElementById(aggId);
+  if (aggCanvas) {
+    const allDates = (store.dateRange||[]).slice().sort().filter(d => d.slice(0,7) === selMonth);
+    const datasets = ks.map((k,ki) => {
+      const kc = KC[ki % KC.length];
+      return {
+        label: sK(k.name),
+        data: allDates.map(d => k.byDate?.[d]?.liq || 0),
+        borderColor: kc.line,
+        backgroundColor: kc.fill,
+        tension: .35, fill: false,
+        pointRadius: 2, borderWidth: 1.8, pointHoverRadius: 5,
+      };
+    });
+    chartInstances[aggId] = new Chart(aggCanvas, {
+      type: 'line',
+      data: { labels: allDates.map(fmtDL), datasets },
+      options: {
+        responsive: true, animation: false,
+        plugins: {
+          legend: { display: true, position: 'top',
+            labels: { color:'#666', font:{family:'DM Mono',size:9}, boxWidth:10, padding:12 }
+          }
+        },
+        scales: {
+          x: { grid:{display:false}, ticks:{color:'#555',font:{family:'DM Mono',size:9},maxTicksLimit:10} },
+          y: { grid:{color:'#1a1a1a'}, ticks:{color:'#555',font:{family:'DM Mono',size:9},
+                 callback: v => 'R$'+v.toLocaleString('pt-BR',{notation:'compact'})} }
+        }
+      }
+    });
+  }
+
+  // ── Per-kiosk mini charts ──
+  ks.forEach((k,ki) => {
+    const cId = 'gcd-'+ki;
+    destroyChart(cId);
+    const cv = document.getElementById(cId); if (!cv) return;
+    const kc = KC[ki % KC.length];
+    const dates = (store.dateRange||[]).slice().sort().filter(d => d.slice(0,7) === selMonth);
+    chartInstances[cId] = new Chart(cv, {
+      type:'line',
+      data:{
+        labels: dates.map(fmtDL),
+        datasets:[{
+          data: dates.map(d => k.byDate?.[d]?.liq || 0),
+          borderColor: kc.line,
+          backgroundColor: kc.fill,
+          tension:.35, fill:true, pointRadius:2, borderWidth:1.5,
+        }]
+      },
+      options:{
+        responsive:true, animation:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{grid:{display:false}, ticks:{color:'#555',font:{family:'DM Mono',size:9},maxTicksLimit:7}},
+          y:{grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#555',font:{family:'DM Mono',size:9},
+               callback: v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
+        }
+      }
+    });
+  });
 }
 
 
@@ -1953,6 +2121,15 @@ function renderGoals() {
           </div>
           <div class="gk-hint" id="calc-k${ki}">${mInd?'→ '+R(mInd)+' por vendedor':''}</div>
         </div>
+        <div class="gk-std-item">
+          <span class="gk-lbl">Meta Diária do Quiosque</span>
+          <div class="gk-inp-row">
+            <input class="gk-inp" type="number" min="0" step="100"
+              value="${G.dailyGoal||''}" placeholder="0"
+              oninput="_setKioskField(${ki},'dailyGoal','',this.value)">
+          </div>
+          <div class="gk-hint">→ super ${G.dailyGoal?R(G.dailyGoal*1.2):''}</div>
+        </div>
       </div>
 
       <div class="gk-sellers-lbl">Vendedores — ativo / inativo</div>
@@ -2049,9 +2226,10 @@ function renderGoals() {
 
 // ── Goals setters ─────────────────────────────────────────
 function ensureKiosk(kn) {
-  if (!goals.kiosks[kn]) goals.kiosks[kn] = { monthlyByMonth:{}, weeklyOverride:{}, activeSellers:[] };
+  if (!goals.kiosks[kn]) goals.kiosks[kn] = { monthlyByMonth:{}, weeklyOverride:{}, activeSellers:[], dailyGoal:0 };
   const G = goals.kiosks[kn];
   if (!G.monthlyByMonth) G.monthlyByMonth = {};
+  if (G.dailyGoal === undefined) G.dailyGoal = 0;
   if (!G.weeklyOverride)              G.weeklyOverride  = {};
   if (!G.activeSellers)               G.activeSellers   = [];
 }
@@ -2069,6 +2247,12 @@ function setKioskField(kn, field, mk, val) {
     goals.kiosks[kn][field] = parseFloat(val) || 0;
   }
   _refreshKioskLabels(kn, mk);
+  // Live update daily hint
+  if (field === 'dailyGoal') {
+    const ki = _ki(kn);
+    const hint = document.querySelector(`#goals-k${ki}-daily-hint`);
+    if (hint) { const v = parseFloat(val)||0; hint.textContent = v ? '→ super '+R(v*1.2) : ''; }
+  }
 }
 
 function setKioskWeek(kn, monKey, val) {
