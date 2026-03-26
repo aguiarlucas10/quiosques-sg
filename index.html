@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Questrial&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- Firebase SDK -->
 <script type="module">
@@ -531,6 +532,11 @@ tr.inactive td{opacity:.35}
 .sku-kiosk-row{cursor:pointer}
 .sku-kiosk-row:hover td{background:rgba(255,255,255,.04)}
 .sku-kiosk-hint{font-size:.65rem;color:var(--muted);margin-left:5px;opacity:.6}
+
+/* ── ESTOQUE IMPORT PANEL ── */
+.stock-import-panel{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:14px}
+.stock-import-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.stock-import-summary{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px}
 
 /* ── ESTOQUE MODULE ── */
 .est-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
@@ -3104,6 +3110,215 @@ async function processAnalyticCSV() {
 }
 
 // ══════════════════════════════════════════════════════════
+//  ESTOQUE IMPORT — CSV/XLSX stock count importer
+// ══════════════════════════════════════════════════════════
+
+// Per-kiosk datetime of last count, keyed by kiosk name
+// Stored in goals.inventory.countDates = { [kiosk]: 'YYYY-MM-DDTHH:MM' }
+
+let _pendingStockImport = null;  // parsed rows before save
+
+function loadStockFile(evt) {
+  const file = evt.target.files[0]; if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+
+  reader.onload = e => {
+    let rows = [];
+    if (ext === 'xlsx' || ext === 'xls') {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+        .filter(r => r.some(c => String(c).trim()));
+    } else {
+      // CSV
+      rows = e.target.result.split(/\r?\n/)
+        .filter(l => l.trim())
+        .map(l => l.split(/[,;\t]/).map(c => c.trim().replace(/^"|"$/g, '')));
+    }
+    parseStockImport(rows);
+  };
+
+  if (ext === 'xlsx' || ext === 'xls') reader.readAsArrayBuffer(file);
+  else reader.readAsText(file, 'UTF-8');
+}
+
+function parseStockImport(rows) {
+  if (!rows.length) { showStockImportError('Arquivo vazio.'); return; }
+
+  // Detect header row — look for SKU, Quantidade, Quiosque columns
+  let headerRow = -1, colSku = -1, colQty = -1, colKiosk = -1;
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    const r = rows[i].map(c => String(c).toLowerCase().trim());
+    const si = r.findIndex(c => c.includes('sku') || c === 'cod' || c === 'código');
+    const qi = r.findIndex(c => c.includes('quant') || c === 'qty' || c === 'estoque' || c === 'un' || c === 'un.');
+    const ki = r.findIndex(c => c.includes('quiosque') || c.includes('loja') || c.includes('kiosk') || c.includes('unidade'));
+    if (si >= 0 && qi >= 0) {
+      headerRow = i; colSku = si; colQty = qi; colKiosk = ki;
+      break;
+    }
+  }
+  if (headerRow < 0) {
+    // Fallback: assume cols 0=SKU, 1=Qty, 2=Kiosk
+    headerRow = rows[0].some(c => /[a-zA-Z]{2,}/.test(String(c))) ? 0 : -1;
+    colSku = 0; colQty = 1; colKiosk = 2;
+  }
+
+  const dataStart = headerRow >= 0 ? headerRow + 1 : 0;
+  const parsed = [];
+  const errors = [];
+
+  for (let i = dataStart; i < rows.length; i++) {
+    const r = rows[i];
+    const sku   = String(r[colSku]||'').trim();
+    const qtyRaw= String(r[colQty]||'').trim().replace(',','.');
+    const kRaw  = colKiosk >= 0 ? String(r[colKiosk]||'').trim() : '';
+    if (!sku) continue;
+
+    const qty = parseFloat(qtyRaw);
+    if (isNaN(qty) || qty < 0) { errors.push(`Linha ${i+1}: quantidade inválida "${qtyRaw}"`); continue; }
+
+    // Fuzzy match kiosk
+    const kMatch = kRaw
+      ? Object.keys(store.kiosks).find(k =>
+          k.toLowerCase().includes(kRaw.toLowerCase()) ||
+          kRaw.toLowerCase().includes(sK(k).toLowerCase()) ||
+          sK(k).toLowerCase().includes(kRaw.toLowerCase())
+        ) || kRaw
+      : null;
+
+    parsed.push({ sku, qty: Math.round(qty), kiosk: kMatch, rawKiosk: kRaw });
+  }
+
+  if (!parsed.length) { showStockImportError('Nenhuma linha válida. Verifique as colunas: SKU | Quantidade | Quiosque'); return; }
+
+  _pendingStockImport = parsed;
+  renderStockImportPreview(parsed, errors);
+}
+
+function renderStockImportPreview(rows, errors) {
+  const el = document.getElementById('stockImportPreview');
+  if (!el) return;
+
+  // Group by kiosk for summary
+  const byKiosk = {};
+  rows.forEach(r => {
+    const k = r.kiosk || '(sem quiosque)';
+    if (!byKiosk[k]) byKiosk[k] = { skus: 0, total: 0 };
+    byKiosk[k].skus++;
+    byKiosk[k].total += r.qty;
+  });
+
+  const ks = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  const now = new Date().toISOString().slice(0,16);
+
+  let h = `<div class="stock-import-summary">
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:12px">
+      ${rows.length} SKUs importados${errors.length?` · <span style="color:var(--danger)">${errors.length} erros</span>`:''}
+    </div>
+    <table style="width:100%;font-size:.8rem;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;color:var(--muted);font-size:.65rem;padding:4px 8px;border-bottom:1px solid var(--border)">Quiosque</th>
+        <th class="num" style="color:var(--muted);font-size:.65rem;padding:4px 8px;border-bottom:1px solid var(--border)">SKUs</th>
+        <th class="num" style="color:var(--muted);font-size:.65rem;padding:4px 8px;border-bottom:1px solid var(--border)">Total Un.</th>
+        <th style="color:var(--muted);font-size:.65rem;padding:4px 8px;border-bottom:1px solid var(--border)">Data e hora da contagem</th>
+      </tr></thead><tbody>`;
+
+  Object.entries(byKiosk).forEach(([k, v]) => {
+    const kioskId = k.replace(/[^a-zA-Z0-9]/g,'_');
+    const kDisplay = k === '(sem quiosque)' ? k : sK(k);
+    h += `<tr>
+      <td style="padding:6px 8px"><strong>${kDisplay}</strong></td>
+      <td class="num" style="padding:6px 8px;font-family:var(--mono)">${v.skus}</td>
+      <td class="num" style="padding:6px 8px;font-family:var(--mono)">${v.total}</td>
+      <td style="padding:6px 8px">
+        <input type="datetime-local" id="countdate-${kioskId}"
+          value="${now}"
+          style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.78rem;padding:3px 8px;height:28px">
+      </td>
+    </tr>`;
+  });
+
+  h += `</tbody></table>`;
+  if (errors.length) {
+    h += `<div style="margin-top:8px;font-size:.72rem;color:var(--danger)">${errors.slice(0,5).join('<br>')}</div>`;
+  }
+  h += `<div style="margin-top:12px;display:flex;gap:8px">
+    <button class="btn-primary" onclick="saveStockImport()" style="height:34px;padding:0 16px;font-size:.8rem">
+      Salvar contagem
+    </button>
+    <button class="btn-secondary" onclick="cancelStockImport()" style="height:34px;padding:0 16px;font-size:.8rem">
+      Cancelar
+    </button>
+  </div></div>`;
+
+  el.innerHTML = h;
+  el.style.display = 'block';
+  document.getElementById('btnSaveStock').style.display = 'none';
+}
+
+function showStockImportError(msg) {
+  const el = document.getElementById('stockImportPreview');
+  if (el) { el.innerHTML = `<div style="color:var(--danger);font-size:.8rem;padding:8px 0">${msg}</div>`; el.style.display='block'; }
+}
+
+async function saveStockImport() {
+  if (!_pendingStockImport?.length) return;
+
+  const inv = getInventory();
+  if (!inv.stock) inv.stock = {};
+  if (!inv.countDates) inv.countDates = {};
+
+  // Group by kiosk, apply datetime
+  const byKiosk = {};
+  _pendingStockImport.forEach(r => {
+    const k = r.kiosk || '';
+    if (!byKiosk[k]) byKiosk[k] = [];
+    byKiosk[k].push(r);
+  });
+
+  Object.entries(byKiosk).forEach(([kn, rows]) => {
+    // Read datetime from input
+    const kioskId = kn.replace(/[^a-zA-Z0-9]/g,'_');
+    const dtInput = document.getElementById(`countdate-${kioskId}`);
+    const dt = dtInput?.value || new Date().toISOString().slice(0,16);
+
+    // Store count date per kiosk
+    inv.countDates[kn] = dt;
+
+    // Merge stock levels
+    rows.forEach(r => {
+      if (!inv.stock[r.sku]) inv.stock[r.sku] = {};
+      if (!inv.stock[r.sku][kn]) inv.stock[r.sku][kn] = {};
+      inv.stock[r.sku][kn].atual = r.qty;
+      inv.stock[r.sku][kn].countDate = dt;
+    });
+  });
+
+  // Save to goals
+  if (!goals.inventory) goals.inventory = { targetDays: estoqueTargetDays, stock: {}, countDates: {} };
+  goals.inventory.stock     = inv.stock;
+  goals.inventory.countDates= inv.countDates;
+
+  try {
+    await saveAllGoals();
+    toast(`Estoque de ${_pendingStockImport.length} SKUs salvo ✓`, 'ok');
+    _pendingStockImport = null;
+    const el = document.getElementById('stockImportPreview');
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+    renderEstoque();
+  } catch(e) {
+    showStockImportError('Erro ao salvar: ' + e.message);
+  }
+}
+
+function cancelStockImport() {
+  _pendingStockImport = null;
+  const el = document.getElementById('stockImportPreview');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+
+// ══════════════════════════════════════════════════════════
 //  ESTOQUE MODULE — Gestão de Reposição
 // ══════════════════════════════════════════════════════════
 
@@ -3218,7 +3433,21 @@ function renderEstoque() {
 
   let h = '';
 
-  // ── Toolbar ──────────────────────────────────────────
+  // ── Stock Import Panel ────────────────────────────────
+  h += `<div class="stock-import-panel">
+    <div class="stock-import-header">
+      <div>
+        <div style="font-size:.82rem;margin-bottom:2px">Importar contagem de estoque</div>
+        <div style="font-size:.72rem;color:var(--muted)">CSV ou XLSX com colunas: <code>SKU</code> · <code>Quantidade</code> · <code>Quiosque</code></div>
+      </div>
+      <label class="btn-secondary" style="cursor:pointer;padding:0 14px;line-height:34px;border-radius:6px;font-size:.8rem;white-space:nowrap">
+        ↑ Selecionar arquivo
+        <input type="file" accept=".csv,.xlsx,.xls,.txt" style="display:none"
+          onchange="loadStockFile(event)">
+      </label>
+    </div>
+    <div id="stockImportPreview" style="display:none;margin-top:12px"></div>
+  </div>`;
   h += `<div class="est-toolbar">
     <div class="est-search-wrap">
       <input class="est-search" type="text" placeholder="Buscar SKU ou produto…"
@@ -3336,6 +3565,7 @@ function toggleEstoqueDetail(detId) {
     const velocity= sold/nDays;
     const atual   = inv.stock?.[sku]?.[kn]?.atual ?? null;
     const padrao  = inv.stock?.[sku]?.[kn]?.padrao ?? null;
+    const countDate = inv.stock?.[sku]?.[kn]?.countDate || inv.countDates?.[kn] || null;
     const diasEst = atual !== null && velocity > 0 ? atual/velocity : null;
     const metaEst = velocity > 0 ? Math.ceil(velocity * estoqueTargetDays) : null;
     const reorder = padrao !== null && atual !== null ? Math.max(0, padrao - atual) : null;
@@ -3343,7 +3573,7 @@ function toggleEstoqueDetail(detId) {
     const kc = KC[ks.indexOf(kn)%KC.length];
 
     h += `<div class="est-kiosk-card" style="border-top:2px solid ${kc.line}">
-      <div class="est-kiosk-name">${sK(kn)}</div>
+      <div class="est-kiosk-name">${sK(kn)}${countDate?`<span style="font-size:.6rem;color:var(--muted);margin-left:6px;font-family:var(--mono)">contagem ${new Date(countDate).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>
       <div class="est-kiosk-nums">
         <div class="est-kn"><div class="est-kn-l">Vendas</div><div class="est-kn-v">${sold}</div></div>
         <div class="est-kn"><div class="est-kn-l">Un./dia</div><div class="est-kn-v">${velocity>=0.1?velocity.toFixed(1):velocity>0?'<0.1':'—'}</div></div>
