@@ -31,25 +31,32 @@ const firebaseConfig = {
   appId:             "1:426898777738:web:1fc62d5dda89389d2c2f73"
 };
 
-/* ── Firestore rules (update in Firebase console):
+/* ── Firestore rules (update in Firebase console'):
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // App data — public read, any authenticated user can write
     match /app/{doc} {
       allow read:  if true;
-      allow write: if request.auth != null
-                   && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+      allow write: if request.auth != null;
     }
+
+    // User profiles
     match /users/{uid} {
-      allow read:  if request.auth != null && (request.auth.uid == uid
-                   || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coordenador','admin']);
-      allow create: if true;  // allow self-registration
+      // User can always read and create their own profile
+      allow read, create: if request.auth != null && request.auth.uid == uid;
+      // Admins and coordenadores can read all profiles
+      allow read:   if request.auth != null
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coordenador','admin'];
+      // Only admins and coordenadores can update profiles (approve/reject/role change)
       allow update: if request.auth != null
-                   && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coordenador','admin'];
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coordenador','admin'];
     }
   }
 }
 */
+
 
 const app  = initializeApp(firebaseConfig);
 const db   = getFirestore(app);
@@ -117,18 +124,36 @@ onAuthStateChanged(auth, async user => {
         window._isAdmin     = ['coordenador','admin'].includes(profile.role);
 
         if (profile.status !== 'active') {
-          // Pending or rejected — show waiting screen
           showPendingScreen(profile);
           await signOut(auth);
           return;
         }
-        // Show UI
         applyRoleUI(profile);
         closeAuthScreens();
         window.tryRender?.();
         return;
       }
-    } catch(e) { console.warn('profile load:', e); }
+      // Profile doc not found — user exists in Auth but not Firestore
+      // Show pending screen with generic message
+      const el = document.getElementById('pendingMsg');
+      if (el) el.textContent = 'Perfil não encontrado. Entre em contato com o administrador.';
+      document.getElementById('authScreen')?.classList.add('show');
+      window.showAuthTab?.('pending');
+      await signOut(auth);
+      return;
+    } catch(e) {
+      console.warn('profile load:', e.code, e.message);
+      // PERMISSION_DENIED usually means rules haven't been deployed yet
+      // or the user doc doesn't exist — sign out and show login
+      const el = document.getElementById('pendingMsg');
+      if (el) el.textContent = e.code === 'permission-denied'
+        ? 'Seu cadastro está aguardando aprovação ou as regras do banco ainda não foram configuradas.'
+        : 'Erro ao carregar perfil: ' + e.message;
+      document.getElementById('authScreen')?.classList.add('show');
+      window.showAuthTab?.('pending');
+      await signOut(auth);
+      return;
+    }
   }
   // Not logged in
   window._isAdmin     = false;
@@ -253,7 +278,7 @@ function showPendingScreen(p) {
     ? 'Seu acesso foi recusado. Entre em contato com o coordenador.'
     : 'Seu cadastro está aguardando aprovação. Você receberá acesso em breve.';
   document.getElementById('authScreen')?.classList.add('show');
-  showAuthTab('pending');
+  window.showAuthTab?.('pending');
 }
 
 window.canAccessTab = canAccessTab;
@@ -802,7 +827,7 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
     <button class="tab admin-only" data-tab="goals" id="tabGoals"       onclick="nav('goals',this)">Metas</button>
   </nav>
   <div class="bar-r">
-    <div class="chip show" id="userChip"><span id="pName"></span><span id="roleChip" style="font-size:.6rem;color:var(--muted);margin-left:4px"></span><button onclick="doSignOut()">sair</button></div>
+    <div class="chip" id="userChip"><span id="pName"></span><span id="roleChip" style="font-size:.6rem;color:var(--muted);margin-left:4px"></span><button onclick="doSignOut()">sair</button></div>
     <button class="btn-outline" id="btnLogin" onclick="document.getElementById('authScreen').classList.add('show');showAuthTab('login')" style="display:none">Entrar</button>
   </div>
 </header>
@@ -1005,7 +1030,7 @@ function nav(id,btn){
 // ══════════════════════════════════════════════════════════
 
 // ── Auth screen tab switching ────────────────────────────
-function showAuthTab(tab) {
+window.showAuthTab = function showAuthTab(tab) {
   document.querySelectorAll('.auth-tab-pane').forEach(p => p.classList.remove('on'));
   document.querySelectorAll('.auth-tab-btn').forEach(b => b.classList.remove('on'));
   document.getElementById('auth-pane-'+tab)?.classList.add('on');
@@ -1035,15 +1060,18 @@ async function doLogin() {
   btn.disabled = true; btn.textContent = 'Entrando…'; err.textContent = '';
   try {
     await window._doLogin(rawCpf, pass);
+    // onAuthStateChanged will handle UI transition
   } catch(e) {
+    console.error('login error:', e.code, e.message);
     const msgs = {
-      'auth/invalid-credential': 'CPF ou senha incorretos.',
-      'auth/user-not-found':     'CPF não cadastrado.',
-      'auth/wrong-password':     'Senha incorreta.',
-      'auth/too-many-requests':  'Muitas tentativas. Tente mais tarde.',
+      'auth/invalid-credential':    'CPF ou senha incorretos.',
+      'auth/user-not-found':        'CPF não cadastrado.',
+      'auth/wrong-password':        'Senha incorreta.',
+      'auth/too-many-requests':     'Muitas tentativas. Tente mais tarde.',
+      'auth/invalid-email':         'Formato de CPF inválido.',
+      'auth/network-request-failed':'Sem conexão com a internet.',
     };
-    err.textContent = msgs[e.code] || 'Erro: ' + e.message;
-  } finally {
+    err.textContent = msgs[e.code] || ('Erro (' + (e.code||'?') + '): ' + e.message);
     btn.disabled = false; btn.textContent = 'Entrar';
   }
 }
@@ -3746,6 +3774,18 @@ function exportReposicao() {
 
 
 
+
+// ── tryRender — called by Firebase module when data changes ────────────────
+window.tryRender = function tryRender() {
+  const tab = document.querySelector('.pnl.on')?.id?.replace('pnl-','') || 'geral';
+  if (!window._userProfile) return;  // not logged in yet
+  if (tab === 'geral')        { window.renderGeral?.();        return; }
+  if (tab === 'kiosques')     { window.renderKiosques?.();     return; }
+  if (tab === 'consolidado')  { window.renderConsolidado?.();  return; }
+  if (tab === 'premiacoes')   { window.renderPremiacoes?.();   return; }
+  // Default: always refresh geral in background
+  window.renderGeral?.();
+};
 
 // ── Re-render if Firebase snapshots already fired before this script loaded ──
 document.addEventListener('DOMContentLoaded', () => {
