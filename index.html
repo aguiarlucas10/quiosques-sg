@@ -1350,6 +1350,35 @@ function fmtDateBR(dateKey) {
   const [,m,d] = dateKey.split('-');
   return d+'/'+m;
 }
+function todayKey() {
+  return new Date().toISOString().slice(0,10);
+}
+function yesterdayKey() {
+  const d = new Date(); d.setDate(d.getDate()-1);
+  return d.toISOString().slice(0,10);
+}
+function kioskDayLiq(kName, dateKey) {
+  return store.kiosks[kName]?.byDate?.[dateKey]?.liq || 0;
+}
+function dailyPrizeBadge(pct) {
+  if (pct >= 160) return { label:'Ultra', cls:'ultra' };
+  if (pct >= 140) return { label:'Mega',  cls:'mega'  };
+  if (pct >= 120) return { label:'Super', cls:'super' };
+  if (pct >= 100) return { label:'Meta',  cls:'hit'   };
+  return null;
+}
+function kioskMonthGoalFromDaily(kName, monthKey) {
+  const db = goals.kiosks[kName]?.dailyByDate||{};
+  return Object.entries(db)
+    .filter(([d]) => d.slice(0,7) === monthKey)
+    .reduce((s,[,v]) => s+v, 0);
+}
+function kioskWeekGoalFromDaily(kName, monday, sunday) {
+  const db = goals.kiosks[kName]?.dailyByDate||{};
+  return Object.entries(db)
+    .filter(([d]) => { const dt=new Date(d+'T00:00:00'); return dt>=monday&&dt<=sunday; })
+    .reduce((s,[,v]) => s+v, 0);
+}
 function R(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return 'R$ ' + Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
