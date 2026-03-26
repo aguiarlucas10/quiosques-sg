@@ -159,12 +159,15 @@ onAuthStateChanged(auth, async user => {
     window.tryRender?.();
     return;
   }
-  // Not logged in
+  // Not logged in — only reset UI if we were previously logged in
+  // (prevents overriding tabs after deliberate signOut for pending/rejected users)
   window._isAdmin     = false;
   window._userRole    = null;
   window._userProfile = null;
-  applyRoleUI(null);
-  showLoginScreen();
+  if (!document.getElementById('authScreen')?.classList.contains('show')) {
+    applyRoleUI(null);
+    showLoginScreen();
+  }
 });
 
 function applyRoleUI(profile) {
@@ -172,10 +175,15 @@ function applyRoleUI(profile) {
   const name     = profile?.name || '';
   const allTabs  = ROLE_TABS[role] || [];
 
-  // Show/hide tabs
-  document.querySelectorAll('.tab[data-tab]').forEach(btn => {
+  // Show/hide navigation tabs (exclude auth-screen tabs)
+  // Admin gets ALL tabs unconditionally
+  document.querySelectorAll('.tabs .tab[data-tab]').forEach(btn => {
     const tab = btn.dataset.tab;
-    btn.style.display = allTabs.includes(tab) ? '' : 'none';
+    if (role === 'admin') {
+      btn.style.display = '';  // admin sees everything
+    } else {
+      btn.style.display = allTabs.includes(tab) ? '' : 'none';
+    }
   });
 
   // User chip
