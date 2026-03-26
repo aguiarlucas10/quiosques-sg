@@ -1450,45 +1450,39 @@ function renderGeral() {
 
   // ── Kiosk cards ──────────────────────────────────────
 
-  // ── Opening Day Banner ──────────────────────────────
-  const selDayK   = geralDay || todayKey();
-  const selDayPrev = (() => { const d=new Date(selDayK+'T00:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
-  const allDates  = (store.dateRange||[]).slice().sort();
-  // Check if ANY kiosk has daily goals configured
-  const hasDailyGoals = ks.some(k => {
-    const db = goals.kiosks[k.name]?.dailyByDate||{};
-    return Object.keys(db).length > 0;
-  });
-  const hasDayData = hasDailyGoals ||
-    ks.some(k => kioskDayLiq(k.name,selDayK)>0 || kioskDayLiq(k.name,selDayPrev)>0);
+  // ── Opening Day Panel (always visible) ──────────────
+  const selDayK = geralDay || todayKey();
+  const selDayPrev = (() => {
+    const d = new Date(selDayK+'T00:00:00');
+    d.setDate(d.getDate()-1);
+    return d.toISOString().slice(0,10);
+  })();
 
-  if (hasDayData) {
-    // Build date selector — only dates with goals OR sales data
-    const datesToShow = new Set([
-      ...allDates,
-      ...ks.flatMap(k => Object.keys(goals.kiosks[k.name]?.dailyByDate||{}))
-    ]);
-    const sortedDays = [...datesToShow].sort().reverse().slice(0,60); // last 60 days
+  {
+    // Build date list: union of sale dates + goal dates + today, newest first
+    const dateSet = new Set([todayKey(), ...allDates]);
+    ks.forEach(k => Object.keys(goals.kiosks[k.name]?.dailyByDate||{}).forEach(d => dateSet.add(d)));
+    const sortedDays = [...dateSet].sort().reverse();
+
+    // Ensure selDayK is in the list
+    if (!dateSet.has(selDayK)) sortedDays.unshift(selDayK);
 
     h += `<div class="day-panel">
       <div class="day-panel-header">
-        <div class="day-panel-title">
-          <span style="opacity:.4;margin-right:6px">◈</span> Abertura do Dia
-        </div>
+        <div class="day-panel-title">◈ Abertura do Dia</div>
         <div class="day-panel-date-wrap">
           <label class="geral-month-lbl">Data</label>
           <select class="geral-month-sel" onchange="setGeralDay(this.value)" style="min-width:130px">`;
     sortedDays.forEach(d => {
-      const label = fmtDateBR(d)+'/'+d.slice(0,4).slice(2);
-      h += `<option value="${d}"${d===selDayK?' selected':''}>${label}</option>`;
+      const [y,m,dd] = d.split('-');
+      const lbl = `${dd}/${m}/${y.slice(2)}`;
+      const isTod = d === todayKey();
+      h += `<option value="${d}"${d===selDayK?' selected':''}>${lbl}${isTod?' · hoje':''}</option>`;
     });
-    if (!sortedDays.includes(todayKey())) {
-      const t=todayKey(); h += `<option value="${t}"${t===selDayK?' selected':''}>Hoje (${fmtDateBR(t)})</option>`;
-    }
     h += `</select></div>
       </div>`;
 
-    // ── Row: Dia anterior (selDayPrev) ──
+    // ── Row: Dia anterior ──
     h += `<div class="day-panel-row">
       <div class="day-panel-row-title">
         <div class="day-panel-row-lbl">Dia anterior</div>
@@ -1496,29 +1490,29 @@ function renderGeral() {
       </div>
       <div class="day-panel-cells">`;
     ks.forEach((k, ki) => {
-      const kn    = k.name;
-      const goal  = kioskDailyGoal(kn, selDayPrev);
-      const liq   = kioskDayLiq(kn, selDayPrev);
-      const sup   = goal * 1.2;
-      const pct   = goal>0 ? (liq/goal)*100 : 0;
-      const badge = goal>0 ? dailyPrizeBadge(pct) : null;
-      const diff  = liq - goal;
-      const kc    = KC[ki % KC.length];
+      const kn   = k.name;
+      const goal = kioskDailyGoal(kn, selDayPrev);
+      const liq  = kioskDayLiq(kn, selDayPrev);
+      const sup  = goal * 1.2;
+      const pct  = goal>0 ? (liq/goal)*100 : 0;
+      const badge= goal>0&&liq>0 ? dailyPrizeBadge(pct) : null;
+      const diff = goal>0 ? liq - goal : 0;
+      const kc   = KC[ki % KC.length];
       h += `<div class="day-panel-cell" style="border-top:2px solid ${kc.line}">
         <div class="day-panel-kname">${sK(kn)}</div>
         <div class="day-panel-nums">
           <div class="day-panel-num"><div class="day-panel-num-lbl">Meta</div><div class="day-panel-num-val">${goal?R(goal):'—'}</div></div>
           <div class="day-panel-num"><div class="day-panel-num-lbl">Super</div><div class="day-panel-num-val">${goal?R(sup):'—'}</div></div>
-          <div class="day-panel-num"><div class="day-panel-num-lbl">Real</div><div class="day-panel-num-val" style="color:${goal&&liq?gColor(pct):'var(--text)'}">${liq?R(liq):'—'}</div></div>
-          ${goal&&liq ? `<div class="day-panel-num"><div class="day-panel-num-lbl">Dif.</div><div class="day-panel-num-val" style="color:${diff>=0?'var(--success)':'var(--danger)'}">${diff>=0?'+':''}${R(diff)}</div></div>` : ''}
+          <div class="day-panel-num"><div class="day-panel-num-lbl">Real</div><div class="day-panel-num-val" style="color:${liq&&goal?gColor(pct):'var(--text)'}">${liq?R(liq):'—'}</div></div>
+          ${goal&&liq?`<div class="day-panel-num"><div class="day-panel-num-lbl">Dif.</div><div class="day-panel-num-val" style="color:${diff>=0?'var(--success)':'var(--danger)'}">${diff>=0?'+':''}${R(diff)}</div></div>`:''}
         </div>
         <div class="day-panel-foot">
-          ${badge ? `<span class="gbadge ${badge.cls}">${badge.label}</span>` : (goal&&liq ? `<span class="gbadge miss">−${floorPct(100-Math.min(pct,100))}%</span>` : '')}
-          ${goal&&liq ? `<span class="day-panel-pct" style="color:${gColor(pct)}">${floorPct(pct)}%</span>` : ''}
+          ${badge?`<span class="gbadge ${badge.cls}">${badge.label}</span>`:goal&&liq?`<span class="gbadge miss">−${floorPct(100-Math.min(pct,100))}%</span>`:''}
+          ${goal&&liq?`<span class="day-panel-pct" style="color:${gColor(pct)}">${floorPct(pct)}%</span>`:''}
         </div>
       </div>`;
     });
-    h += `</div></div>`;  // cells + row
+    h += `</div></div>`;
 
     // ── Row: Abertura (selDayK) ──
     h += `<div class="day-panel-row day-panel-row-today">
@@ -1528,26 +1522,26 @@ function renderGeral() {
       </div>
       <div class="day-panel-cells">`;
     ks.forEach((k, ki) => {
-      const kn    = k.name;
-      const goal  = kioskDailyGoal(kn, selDayK);
-      const liq   = kioskDayLiq(kn, selDayK);
-      const sup   = goal * 1.2;
-      const pct   = goal>0 ? (liq/goal)*100 : 0;
-      const badge = goal>0&&liq>0 ? dailyPrizeBadge(pct) : null;
-      const kc    = KC[ki % KC.length];
+      const kn   = k.name;
+      const goal = kioskDailyGoal(kn, selDayK);
+      const liq  = kioskDayLiq(kn, selDayK);
+      const sup  = goal * 1.2;
+      const pct  = goal>0&&liq>0 ? (liq/goal)*100 : 0;
+      const badge= goal>0&&liq>0 ? dailyPrizeBadge(pct) : null;
+      const kc   = KC[ki % KC.length];
       h += `<div class="day-panel-cell day-panel-cell-today" style="border-top:2px solid ${kc.line}60">
         <div class="day-panel-kname">${sK(kn)}</div>
         <div class="day-panel-nums">
           <div class="day-panel-num"><div class="day-panel-num-lbl">Meta</div><div class="day-panel-num-val">${goal?R(goal):'—'}</div></div>
           <div class="day-panel-num"><div class="day-panel-num-lbl">Super</div><div class="day-panel-num-val">${goal?R(sup):'—'}</div></div>
-          ${liq>0 ? `
+          ${liq>0?`
           <div class="day-panel-num"><div class="day-panel-num-lbl">Real</div><div class="day-panel-num-val" style="color:${gColor(pct)}">${R(liq)}</div></div>
-          <div class="day-panel-num"><div class="day-panel-num-lbl">%</div><div class="day-panel-num-val" style="color:${gColor(pct)}">${floorPct(pct)}%</div></div>` : ''}
+          <div class="day-panel-num"><div class="day-panel-num-lbl">%</div><div class="day-panel-num-val" style="color:${gColor(pct)}">${floorPct(pct)}%</div></div>`:''}
         </div>
         ${badge?`<div class="day-panel-foot"><span class="gbadge ${badge.cls}">${badge.label}</span></div>`:''}
       </div>`;
     });
-    h += `</div></div>`;  // cells + row
+    h += `</div></div>`;
     h += `</div>`;  // day-panel
   }
 
@@ -2367,6 +2361,49 @@ function renderGoals() {
       </button>
     </div>
   </div>`;
+
+  // ── Daily goals table ──────────────────────────────
+  const allKioskNames = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  const allDailyDates = new Set();
+  allKioskNames.forEach(kn => {
+    Object.keys(goals.kiosks[kn]?.dailyByDate||{}).forEach(d => allDailyDates.add(d));
+  });
+  const sortedDailyDates = [...allDailyDates].sort();
+
+  if (sortedDailyDates.length) {
+    h += `<div class="h2" style="margin-top:24px">Metas Diárias Configuradas</div>
+    <div class="tw tw-scroll"><table>
+      <thead><tr>
+        <th>Data</th>`;
+    allKioskNames.forEach(kn => h += `<th class="num">${sK(kn)}</th>`);
+    h += `<th class="num">Total</th></tr></thead><tbody>`;
+
+    sortedDailyDates.forEach(d => {
+      const [y,m,dd] = d.split('-');
+      const rowDate = `${dd}/${m}`;
+      const vals = allKioskNames.map(kn => goals.kiosks[kn]?.dailyByDate?.[d] || 0);
+      const total = vals.reduce((s,v) => s+v, 0);
+      h += `<tr>
+        <td style="font-family:var(--mono);font-size:.82rem">${rowDate}</td>`;
+      vals.forEach(v => h += `<td class="mo num" style="font-size:.82rem">${v ? R(v) : '<span style="color:var(--muted)">—</span>'}</td>`);
+      h += `<td class="mo num" style="font-size:.82rem">${total ? R(total) : '—'}</td>
+      </tr>`;
+    });
+
+    // Totals row
+    h += `<tr style="border-top:1px solid var(--border)">
+      <td style="font-size:.72rem;color:var(--muted)">Total</td>`;
+    allKioskNames.forEach(kn => {
+      const t = Object.values(goals.kiosks[kn]?.dailyByDate||{}).reduce((s,v)=>s+v,0);
+      h += `<td class="mo num" style="font-size:.82rem">${t ? R(t) : '—'}</td>`;
+    });
+    const grandTotal = allKioskNames.reduce((s,kn)=>s+Object.values(goals.kiosks[kn]?.dailyByDate||{}).reduce((ss,v)=>ss+v,0),0);
+    h += `<td class="mo num" style="font-size:.82rem">${grandTotal ? R(grandTotal) : '—'}</td></tr>`;
+    h += `</tbody></table></div>`;
+  } else {
+    h += `<div class="h2" style="margin-top:24px">Metas Diárias Configuradas</div>
+    <div style="color:var(--muted);font-size:.82rem;padding:16px 0">Nenhuma meta diária importada ainda.</div>`;
+  }
 
   document.getElementById('goalsBody').innerHTML = h;
 }
