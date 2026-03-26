@@ -467,24 +467,29 @@ tr.inactive td{opacity:.35}
 
 /* ── OPENING DAY PANEL ── */
 .day-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px}
-.day-panel-header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.day-panel-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--surface2)}
 .day-panel-title{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .day-panel-date-wrap{display:flex;align-items:center;gap:8px}
-.day-panel-row{padding:14px 18px}
+.day-panel-row{padding:16px 20px}
 .day-panel-row+.day-panel-row{border-top:1px solid var(--border)}
 .day-panel-row-today{background:rgba(255,255,255,.02)}
-.day-panel-row-title{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+.day-panel-row-title{display:flex;align-items:baseline;gap:8px;margin-bottom:14px}
 .day-panel-row-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .day-panel-row-date{font-family:var(--mono);font-size:.78rem;color:var(--text);opacity:.6}
-.day-panel-cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
-.day-panel-cell{background:var(--surface2);border-radius:8px;padding:12px 14px}
+/* Always 4 equal columns, matching the chart width */
+.day-panel-cells{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.day-panel-cell{background:var(--surface2);border-radius:8px;padding:14px 16px;min-width:0;overflow:hidden}
 .day-panel-cell-today{background:rgba(255,255,255,.015)}
-.day-panel-kname{font-size:.78rem;letter-spacing:.04em;color:var(--text);margin-bottom:10px}
-.day-panel-nums{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;margin-bottom:8px}
-.day-panel-num-lbl{font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
-.day-panel-num-val{font-family:var(--mono);font-size:.82rem;color:var(--text)}
-.day-panel-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:20px}
+.day-panel-kname{font-size:.8rem;letter-spacing:.04em;color:var(--text);margin-bottom:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 2x2 grid inside each cell for META/SUPER/REAL/DIF */
+.day-panel-nums{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-bottom:10px}
+.day-panel-num{min-width:0}
+.day-panel-num-lbl{font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.day-panel-num-val{font-family:var(--mono);font-size:.78rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day-panel-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:22px}
 .day-panel-pct{font-family:var(--mono);font-size:.78rem}
+/* Responsive: 2 cols on mobile */
+@media(max-width:700px){.day-panel-cells{grid-template-columns:repeat(2,1fr)}}
 
 /* ── DAILY GOALS IMPORT (Metas tab) ── */
 .goals-daily-import{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px}
