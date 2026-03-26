@@ -1073,6 +1073,20 @@ function sWeekLiq(kName, sName, monday, sunday) {
 }
 
 // ── Prize tiers ──────────────────────────────────────────
+// ── Per-kiosk accent colors ─────────────────────────────
+const KC = [
+  { line:'#60a5fa', fill:'rgba(96,165,250,.12)',  border:'rgba(96,165,250,.25)'  },
+  { line:'#34d399', fill:'rgba(52,211,153,.12)',  border:'rgba(52,211,153,.25)'  },
+  { line:'#f59e0b', fill:'rgba(245,158,11,.12)',  border:'rgba(245,158,11,.25)'  },
+  { line:'#f472b6', fill:'rgba(244,114,182,.12)', border:'rgba(244,114,182,.25)' },
+];
+const CLRS = [
+  'rgba(255,255,255,.90)',
+  'rgba(255,255,255,.65)',
+  'rgba(255,255,255,.42)',
+  'rgba(255,255,255,.25)',
+];
+
 const PRIZE_TIERS = [
   { pct:160, label:'Ultra', cls:'ultra', prize:200 },
   { pct:140, label:'Mega',  cls:'mega',  prize:150 },
