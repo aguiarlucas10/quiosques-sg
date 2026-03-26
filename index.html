@@ -464,6 +464,27 @@ tr.inactive td{opacity:.35}
 .gc-chart-wrap{padding:14px 18px;border-top:1px solid var(--border)}
 .gc-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 
+/* ── OPENING DAY PANEL ── */
+.day-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.day-panel-header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.day-panel-title{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.day-panel-date-wrap{display:flex;align-items:center;gap:8px}
+.day-panel-row{padding:14px 18px}
+.day-panel-row+.day-panel-row{border-top:1px solid var(--border)}
+.day-panel-row-today{background:rgba(255,255,255,.02)}
+.day-panel-row-title{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+.day-panel-row-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.day-panel-row-date{font-family:var(--mono);font-size:.78rem;color:var(--text);opacity:.6}
+.day-panel-cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.day-panel-cell{background:var(--surface2);border-radius:8px;padding:12px 14px}
+.day-panel-cell-today{background:rgba(255,255,255,.015)}
+.day-panel-kname{font-size:.78rem;letter-spacing:.04em;color:var(--text);margin-bottom:10px}
+.day-panel-nums{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;margin-bottom:8px}
+.day-panel-num-lbl{font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.day-panel-num-val{font-family:var(--mono);font-size:.82rem;color:var(--text)}
+.day-panel-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:20px}
+.day-panel-pct{font-family:var(--mono);font-size:.78rem}
+
 /* ── DAILY GOALS IMPORT (Metas tab) ── */
 .goals-daily-import{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px}
 .gdi-desc{font-size:.8rem;color:var(--muted);line-height:1.7;margin-bottom:12px}
@@ -1353,14 +1374,19 @@ function fmtDateBR(dateKey) {
 // ── Painel Geral — estado ──
 let geralPeriod = null;  // YYYY-MM
 let geralWeek   = null;  // YYYY-MM-DD (monKey) ou null = mês completo
+let geralDay    = null;  // YYYY-MM-DD selected day for opening panel (null = today)
 
 function setGeralPeriod(val) {
   geralPeriod = val;
-  geralWeek   = null;  // reset semana ao trocar mês
+  geralWeek   = null;
   renderGeral();
 }
 function setGeralWeek(val) {
   geralWeek = val || null;
+  renderGeral();
+}
+function setGeralDay(val) {
+  geralDay = val || null;
   renderGeral();
 }
 
@@ -1423,6 +1449,108 @@ function renderGeral() {
   h += `</div>`;  // geral-filters
 
   // ── Kiosk cards ──────────────────────────────────────
+
+  // ── Opening Day Banner ──────────────────────────────
+  const selDayK   = geralDay || todayKey();
+  const selDayPrev = (() => { const d=new Date(selDayK+'T00:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
+  const allDates  = (store.dateRange||[]).slice().sort();
+  // Check if ANY kiosk has daily goals configured
+  const hasDailyGoals = ks.some(k => {
+    const db = goals.kiosks[k.name]?.dailyByDate||{};
+    return Object.keys(db).length > 0;
+  });
+  const hasDayData = hasDailyGoals ||
+    ks.some(k => kioskDayLiq(k.name,selDayK)>0 || kioskDayLiq(k.name,selDayPrev)>0);
+
+  if (hasDayData) {
+    // Build date selector — only dates with goals OR sales data
+    const datesToShow = new Set([
+      ...allDates,
+      ...ks.flatMap(k => Object.keys(goals.kiosks[k.name]?.dailyByDate||{}))
+    ]);
+    const sortedDays = [...datesToShow].sort().reverse().slice(0,60); // last 60 days
+
+    h += `<div class="day-panel">
+      <div class="day-panel-header">
+        <div class="day-panel-title">
+          <span style="opacity:.4;margin-right:6px">◈</span> Abertura do Dia
+        </div>
+        <div class="day-panel-date-wrap">
+          <label class="geral-month-lbl">Data</label>
+          <select class="geral-month-sel" onchange="setGeralDay(this.value)" style="min-width:130px">`;
+    sortedDays.forEach(d => {
+      const label = fmtDateBR(d)+'/'+d.slice(0,4).slice(2);
+      h += `<option value="${d}"${d===selDayK?' selected':''}>${label}</option>`;
+    });
+    if (!sortedDays.includes(todayKey())) {
+      const t=todayKey(); h += `<option value="${t}"${t===selDayK?' selected':''}>Hoje (${fmtDateBR(t)})</option>`;
+    }
+    h += `</select></div>
+      </div>`;
+
+    // ── Row: Dia anterior (selDayPrev) ──
+    h += `<div class="day-panel-row">
+      <div class="day-panel-row-title">
+        <div class="day-panel-row-lbl">Dia anterior</div>
+        <div class="day-panel-row-date">${fmtDateBR(selDayPrev)}</div>
+      </div>
+      <div class="day-panel-cells">`;
+    ks.forEach((k, ki) => {
+      const kn    = k.name;
+      const goal  = kioskDailyGoal(kn, selDayPrev);
+      const liq   = kioskDayLiq(kn, selDayPrev);
+      const sup   = goal * 1.2;
+      const pct   = goal>0 ? (liq/goal)*100 : 0;
+      const badge = goal>0 ? dailyPrizeBadge(pct) : null;
+      const diff  = liq - goal;
+      const kc    = KC[ki % KC.length];
+      h += `<div class="day-panel-cell" style="border-top:2px solid ${kc.line}">
+        <div class="day-panel-kname">${sK(kn)}</div>
+        <div class="day-panel-nums">
+          <div class="day-panel-num"><div class="day-panel-num-lbl">Meta</div><div class="day-panel-num-val">${goal?R(goal):'—'}</div></div>
+          <div class="day-panel-num"><div class="day-panel-num-lbl">Super</div><div class="day-panel-num-val">${goal?R(sup):'—'}</div></div>
+          <div class="day-panel-num"><div class="day-panel-num-lbl">Real</div><div class="day-panel-num-val" style="color:${goal&&liq?gColor(pct):'var(--text)'}">${liq?R(liq):'—'}</div></div>
+          ${goal&&liq ? `<div class="day-panel-num"><div class="day-panel-num-lbl">Dif.</div><div class="day-panel-num-val" style="color:${diff>=0?'var(--success)':'var(--danger)'}">${diff>=0?'+':''}${R(diff)}</div></div>` : ''}
+        </div>
+        <div class="day-panel-foot">
+          ${badge ? `<span class="gbadge ${badge.cls}">${badge.label}</span>` : (goal&&liq ? `<span class="gbadge miss">−${floorPct(100-Math.min(pct,100))}%</span>` : '')}
+          ${goal&&liq ? `<span class="day-panel-pct" style="color:${gColor(pct)}">${floorPct(pct)}%</span>` : ''}
+        </div>
+      </div>`;
+    });
+    h += `</div></div>`;  // cells + row
+
+    // ── Row: Abertura (selDayK) ──
+    h += `<div class="day-panel-row day-panel-row-today">
+      <div class="day-panel-row-title">
+        <div class="day-panel-row-lbl">Abertura</div>
+        <div class="day-panel-row-date">${fmtDateBR(selDayK)}</div>
+      </div>
+      <div class="day-panel-cells">`;
+    ks.forEach((k, ki) => {
+      const kn    = k.name;
+      const goal  = kioskDailyGoal(kn, selDayK);
+      const liq   = kioskDayLiq(kn, selDayK);
+      const sup   = goal * 1.2;
+      const pct   = goal>0 ? (liq/goal)*100 : 0;
+      const badge = goal>0&&liq>0 ? dailyPrizeBadge(pct) : null;
+      const kc    = KC[ki % KC.length];
+      h += `<div class="day-panel-cell day-panel-cell-today" style="border-top:2px solid ${kc.line}60">
+        <div class="day-panel-kname">${sK(kn)}</div>
+        <div class="day-panel-nums">
+          <div class="day-panel-num"><div class="day-panel-num-lbl">Meta</div><div class="day-panel-num-val">${goal?R(goal):'—'}</div></div>
+          <div class="day-panel-num"><div class="day-panel-num-lbl">Super</div><div class="day-panel-num-val">${goal?R(sup):'—'}</div></div>
+          ${liq>0 ? `
+          <div class="day-panel-num"><div class="day-panel-num-lbl">Real</div><div class="day-panel-num-val" style="color:${gColor(pct)}">${R(liq)}</div></div>
+          <div class="day-panel-num"><div class="day-panel-num-lbl">%</div><div class="day-panel-num-val" style="color:${gColor(pct)}">${floorPct(pct)}%</div></div>` : ''}
+        </div>
+        ${badge?`<div class="day-panel-foot"><span class="gbadge ${badge.cls}">${badge.label}</span></div>`:''}
+      </div>`;
+    });
+    h += `</div></div>`;  // cells + row
+    h += `</div>`;  // day-panel
+  }
+
   h += `<div class="gc-agg-chart">
     <div class="gc-chart-lbl">Faturamento Líquido Diário · Todos os Quiosques</div>
     <canvas id="gcd-all" height="60"></canvas>
@@ -1464,52 +1592,6 @@ function renderGeral() {
 
     if (kGoal) {
       h += `<div class="gc-bar-wrap"><div class="gc-bar"><div class="gc-fill" style="width:${Math.min(kPct,100)}%;background:${gColor(kPct)}"></div></div></div>`;
-    }
-
-    // ── Daily panel: yesterday result + today goal ──────
-    const todayK     = todayKey();
-    const yestK      = yesterdayKey();
-    const dGoal      = kioskDailyGoal(kName, yestK) || kioskDailyGoal(kName, todayK);
-    const yestLiq    = kioskDayLiq(kName, yestK);
-    const todayLiq   = kioskDayLiq(kName, todayK);
-    const todayDGoal = kioskDailyGoal(kName, todayK);
-    const superGoal  = todayDGoal * 1.2;
-    const yPct       = dGoal>0 ? (yestLiq/dGoal)*100 : 0;
-    const tPct       = dGoal>0 ? (todayLiq/dGoal)*100 : 0;
-    const yBadge     = dGoal>0 ? dailyPrizeBadge(yPct) : null;
-    const hasYest    = yestLiq > 0;
-    const hasToday   = todayLiq > 0;
-
-    if (dGoal || hasYest || hasToday) {
-      h += `<div class="gc-daily">`;
-
-      // Yesterday result
-      if (hasYest || dGoal) {
-        const yColor = dGoal>0 ? gColor(yPct) : 'var(--muted)';
-        h += `<div class="gc-daily-col">
-          <div class="gc-daily-lbl">${fmtDateBR(yestK)} · Ontem</div>
-          <div class="gc-daily-val" style="color:${yColor}">${R(yestLiq)}</div>
-          <div class="gc-daily-sub">
-            ${dGoal ? `meta ${R(dGoal)}` : ''}
-            ${dGoal ? `<span style="color:${yColor};margin-left:4px">${floorPct(yPct)}%</span>` : ''}
-            ${yBadge ? `<span class="gbadge ${yBadge.cls}" style="margin-left:4px">${yBadge.label}</span>` : ''}
-          </div>
-        </div>`;
-      }
-
-      // Today goal
-      if (dGoal) {
-        h += `<div class="gc-daily-col">
-          <div class="gc-daily-lbl">${fmtDateBR(todayK)} · Hoje</div>
-          ${hasToday
-            ? `<div class="gc-daily-val" style="color:${gColor(tPct)}">${R(todayLiq)}</div>
-               <div class="gc-daily-sub">meta ${R(dGoal)} · <span style="color:${gColor(tPct)}">${floorPct(tPct)}%</span></div>`
-            : `<div class="gc-daily-val">${R(todayDGoal||dGoal)}</div>
-               <div class="gc-daily-sub">meta · super ${R(superGoal||dGoal*1.2)}</div>`}
-        </div>`;
-      }
-
-      h += `</div>`;  // gc-daily
     }
 
     // ── Seller rows (no prize badges) ──────────────────
