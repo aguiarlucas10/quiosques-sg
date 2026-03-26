@@ -464,6 +464,17 @@ tr.inactive td{opacity:.35}
 .gc-chart-wrap{padding:14px 18px;border-top:1px solid var(--border)}
 .gc-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 
+/* ── DAILY GOALS IMPORT (Metas tab) ── */
+.goals-daily-import{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px}
+.gdi-desc{font-size:.8rem;color:var(--muted);line-height:1.7;margin-bottom:12px}
+.gdi-desc code{background:var(--border);padding:1px 5px;border-radius:3px;font-size:.78rem;color:var(--text)}
+.gdi-table-wrap{overflow-x:auto;margin-bottom:4px}
+.gdi-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.gdi-table th{text-align:left;color:var(--muted);font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-bottom:1px solid var(--border)}
+.gdi-table td{padding:7px 10px;border-bottom:1px solid rgba(42,42,42,.5)}
+.gdi-table tr:last-child td{border-bottom:none}
+.gdi-preview{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:12px}
+
 /* ── RESPONSIVE ── */
 
 /* Prize tier badges */
@@ -943,14 +954,21 @@ function activeSellers(kName){
 
 // Kiosk monthly goal (total configured directly)
 function kioskMonthGoal(kName, monthKey) {
-  return goals.kiosks[kName]?.monthlyByMonth?.[monthKey] || 0;
+  const manual = goals.kiosks[kName]?.monthlyByMonth?.[monthKey] || 0;
+  if (manual) return manual;
+  return kioskMonthGoalFromDaily(kName, monthKey);
 }
 
 // Kiosk weekly goal for a specific Monday key
 // Uses weeklyOverride if set, else weeklyDefault
-function kioskWeekGoal(kName,monKey){
-  const G=goals.kiosks[kName];if(!G)return 0;
-  return G.weeklyOverride?.[monKey]||G.weeklyDefault||0;
+function kioskWeekGoal(kName, monKey, monday, sunday) {
+  const G = goals.kiosks[kName]; if (!G) return 0;
+  if (G.weeklyOverride?.[monKey]) return G.weeklyOverride[monKey];
+  if (monday && sunday) return kioskWeekGoalFromDaily(kName, monday, sunday);
+  // fallback: compute monday/sunday from monKey
+  const mon = new Date(monKey+'T00:00:00');
+  const sun = new Date(mon.getTime()+6*86400000);
+  return kioskWeekGoalFromDaily(kName, mon, sun);
 }
 
 // Seller monthly goal = kiosk total ÷ n° active sellers
@@ -1292,8 +1310,22 @@ function toggleGeralWeeks(kName) {
 //  RENDER GERAL
 // ══════════════════════════════════════════════════════════
 // ── Daily goal helpers ──────────────────────────────
-function kioskDailyGoal(kName) {
-  return goals.kiosks[kName]?.dailyGoal || 0;
+function kioskDailyGoal(kName, dateKey) {
+  return goals.kiosks[kName]?.dailyByDate?.[dateKey] || 0;
+}
+// Sum daily goals for a month
+function kioskMonthGoalFromDaily(kName, monthKey) {
+  const db = goals.kiosks[kName]?.dailyByDate||{};
+  return Object.entries(db)
+    .filter(([d]) => d.slice(0,7) === monthKey)
+    .reduce((s,[,v]) => s+v, 0);
+}
+// Sum daily goals for a week (Mon–Sun)
+function kioskWeekGoalFromDaily(kName, monday, sunday) {
+  const db = goals.kiosks[kName]?.dailyByDate||{};
+  return Object.entries(db)
+    .filter(([d]) => { const dt=new Date(d+'T00:00:00'); return dt>=monday&&dt<=sunday; })
+    .reduce((s,[,v]) => s+v, 0);
 }
 function todayKey() {
   return new Date().toISOString().slice(0,10);
@@ -1393,7 +1425,7 @@ function renderGeral() {
   // ── Kiosk cards ──────────────────────────────────────
   h += `<div class="gc-agg-chart">
     <div class="gc-chart-lbl">Faturamento Líquido Diário · Todos os Quiosques</div>
-    <canvas id="gcd-all" height="120"></canvas>
+    <canvas id="gcd-all" height="60"></canvas>
   </div>`;
   h += `<div class="geral-grid">`;
 
@@ -1437,10 +1469,11 @@ function renderGeral() {
     // ── Daily panel: yesterday result + today goal ──────
     const todayK     = todayKey();
     const yestK      = yesterdayKey();
-    const dGoal      = kioskDailyGoal(kName);
+    const dGoal      = kioskDailyGoal(kName, yestK) || kioskDailyGoal(kName, todayK);
     const yestLiq    = kioskDayLiq(kName, yestK);
     const todayLiq   = kioskDayLiq(kName, todayK);
-    const superGoal  = dGoal * 1.2;
+    const todayDGoal = kioskDailyGoal(kName, todayK);
+    const superGoal  = todayDGoal * 1.2;
     const yPct       = dGoal>0 ? (yestLiq/dGoal)*100 : 0;
     const tPct       = dGoal>0 ? (todayLiq/dGoal)*100 : 0;
     const yBadge     = dGoal>0 ? dailyPrizeBadge(yPct) : null;
@@ -1471,8 +1504,8 @@ function renderGeral() {
           ${hasToday
             ? `<div class="gc-daily-val" style="color:${gColor(tPct)}">${R(todayLiq)}</div>
                <div class="gc-daily-sub">meta ${R(dGoal)} · <span style="color:${gColor(tPct)}">${floorPct(tPct)}%</span></div>`
-            : `<div class="gc-daily-val">${R(dGoal)}</div>
-               <div class="gc-daily-sub">meta · super ${R(superGoal)}</div>`}
+            : `<div class="gc-daily-val">${R(todayDGoal||dGoal)}</div>
+               <div class="gc-daily-sub">meta · super ${R(superGoal||dGoal*1.2)}</div>`}
         </div>`;
       }
 
@@ -1565,7 +1598,7 @@ function renderGeral() {
     h += `${lastSale?`<div class="gc-last-sale">Última venda: ${lastSale}</div>`:''}
     <div class="gc-chart-wrap">
       <div class="gc-chart-lbl">Faturamento Líquido Diário</div>
-      <canvas id="${cId}" height="70"></canvas>
+      <canvas id="${cId}" height="50"></canvas>
     </div>`;
     h += `</div>`;  // gc-card
   });
@@ -2080,7 +2113,27 @@ function renderGoals() {
 
   if (!ks.length) {
     h += `<div class="empty"><div class="ei">○</div><div class="et">Importe um relatório primeiro</div></div>`;
-    document.getElementById('goalsBody').innerHTML = h;
+    // ── Daily goals CSV import ──────────────────────────
+  h += `<div class="h2">Metas Diárias</div>
+  <div class="goals-daily-import">
+    <div class="gdi-desc">
+      Importe um CSV com as metas diárias de cada quiosque.<br>
+      Colunas: <code>DATA</code> (DD/MM), <code>QUIOSQUE</code>, <code>META</code><br>
+      A meta mensal e semanal serão calculadas automaticamente a partir das metas diárias.
+    </div>
+    <div class="gdi-preview" id="dailyGoalPreview" style="display:none"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+      <label class="btn-secondary" style="cursor:pointer;padding:0 16px;line-height:36px;border-radius:6px;font-size:.82rem">
+        Selecionar CSV
+        <input type="file" accept=".csv,.txt" style="display:none" onchange="loadDailyGoalCSV(event)">
+      </label>
+      <button class="btn-primary" id="btnSaveDailyGoals" onclick="saveDailyGoals()" disabled style="height:36px;padding:0 16px;font-size:.82rem">
+        Salvar metas diárias
+      </button>
+    </div>
+  </div>`;
+
+  document.getElementById('goalsBody').innerHTML = h;
     return;
   }
 
@@ -2121,15 +2174,7 @@ function renderGoals() {
           </div>
           <div class="gk-hint" id="calc-k${ki}">${mInd?'→ '+R(mInd)+' por vendedor':''}</div>
         </div>
-        <div class="gk-std-item">
-          <span class="gk-lbl">Meta Diária do Quiosque</span>
-          <div class="gk-inp-row">
-            <input class="gk-inp" type="number" min="0" step="100"
-              value="${G.dailyGoal||''}" placeholder="0"
-              oninput="_setKioskField(${ki},'dailyGoal','',this.value)">
-          </div>
-          <div class="gk-hint">→ super ${G.dailyGoal?R(G.dailyGoal*1.2):''}</div>
-        </div>
+
       </div>
 
       <div class="gk-sellers-lbl">Vendedores — ativo / inativo</div>
@@ -2221,15 +2266,35 @@ function renderGoals() {
     <span class="save-notice" id="saveNotice">✓ Salvo</span>
   </div>`;
 
+  // ── Daily goals CSV import ──────────────────────────
+  h += `<div class="h2">Metas Diárias</div>
+  <div class="goals-daily-import">
+    <div class="gdi-desc">
+      Importe um CSV com as metas diárias de cada quiosque.<br>
+      Colunas: <code>DATA</code> (DD/MM), <code>QUIOSQUE</code>, <code>META</code><br>
+      A meta mensal e semanal serão calculadas automaticamente a partir das metas diárias.
+    </div>
+    <div class="gdi-preview" id="dailyGoalPreview" style="display:none"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+      <label class="btn-secondary" style="cursor:pointer;padding:0 16px;line-height:36px;border-radius:6px;font-size:.82rem">
+        Selecionar CSV
+        <input type="file" accept=".csv,.txt" style="display:none" onchange="loadDailyGoalCSV(event)">
+      </label>
+      <button class="btn-primary" id="btnSaveDailyGoals" onclick="saveDailyGoals()" disabled style="height:36px;padding:0 16px;font-size:.82rem">
+        Salvar metas diárias
+      </button>
+    </div>
+  </div>`;
+
   document.getElementById('goalsBody').innerHTML = h;
 }
 
 // ── Goals setters ─────────────────────────────────────────
 function ensureKiosk(kn) {
-  if (!goals.kiosks[kn]) goals.kiosks[kn] = { monthlyByMonth:{}, weeklyOverride:{}, activeSellers:[], dailyGoal:0 };
+  if (!goals.kiosks[kn]) goals.kiosks[kn] = { monthlyByMonth:{}, weeklyOverride:{}, activeSellers:[], dailyByDate:{} };
   const G = goals.kiosks[kn];
   if (!G.monthlyByMonth) G.monthlyByMonth = {};
-  if (G.dailyGoal === undefined) G.dailyGoal = 0;
+  if (!G.dailyByDate) G.dailyByDate = {};
   if (!G.weeklyOverride)              G.weeklyOverride  = {};
   if (!G.activeSellers)               G.activeSellers   = [];
 }
@@ -2428,6 +2493,139 @@ function renderPremiacoes() {
   document.getElementById('premiacoesBody').innerHTML = h;
 }
 
+
+// ── Daily goals CSV import ──────────────────────────
+let _pendingDailyGoals = null;  // parsed before save
+
+function loadDailyGoalCSV(evt) {
+  const file = evt.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    const result = parseDailyGoalCSV(text);
+    if (!result.rows.length) {
+      document.getElementById('dailyGoalPreview').style.display = 'none';
+      alert('Nenhuma linha válida encontrada. Verifique o formato: DD/MM, Quiosque, Meta');
+      return;
+    }
+    _pendingDailyGoals = result.rows;
+    renderDailyGoalPreview(result);
+    document.getElementById('btnSaveDailyGoals').disabled = false;
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseDailyGoalCSV(text) {
+  const rows = [];
+  const errors = [];
+  const lines = text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('#'));
+  // Skip header row if present
+  const start = lines[0]?.toLowerCase().includes('data') ? 1 : 0;
+  for (let i = start; i < lines.length; i++) {
+    const parts = lines[i].split(/[,;\t]/).map(s => s.trim().replace(/"/g,''));
+    if (parts.length < 3) { errors.push(`Linha ${i+1}: colunas insuficientes`); continue; }
+    const [rawDate, kName, rawMeta] = parts;
+    // Parse date DD/MM or DD/MM/YYYY or DD/MM/YY
+    const dm = rawDate.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?$/);
+    if (!dm) { errors.push(`Linha ${i+1}: data inválida '${rawDate}'`); continue; }
+    const day = dm[1].padStart(2,'0'), mon = dm[2].padStart(2,'0');
+    const yr  = dm[3] ? (dm[3].length===2 ? '20'+dm[3] : dm[3]) : new Date().getFullYear().toString();
+    const dateKey = `${yr}-${mon}-${day}`;
+    // Parse meta value (BR format or plain)
+    const meta = parseFloat(rawMeta.replace(/\./g,'').replace(',','.'));
+    if (isNaN(meta) || meta < 0) { errors.push(`Linha ${i+1}: meta inválida '${rawMeta}'`); continue; }
+    // Match kiosk name (fuzzy)
+    const kMatch = Object.keys(store.kiosks).find(k =>
+      k.toLowerCase().includes(kName.toLowerCase()) ||
+      kName.toLowerCase().includes(sK(k).toLowerCase()) ||
+      sK(k).toLowerCase().includes(kName.toLowerCase())
+    ) || kName;
+    rows.push({ dateKey, kName: kMatch, meta });
+  }
+  return { rows, errors };
+}
+
+function renderDailyGoalPreview(result) {
+  const el = document.getElementById('dailyGoalPreview');
+  if (!el) return;
+  // Group by kiosk+month for summary
+  const byKiosk = {};
+  result.rows.forEach(({dateKey, kName, meta}) => {
+    const mk = dateKey.slice(0,7);
+    const key = kName+'|'+mk;
+    if (!byKiosk[key]) byKiosk[key] = {kName, mk, total:0, days:0};
+    byKiosk[key].total += meta;
+    byKiosk[key].days++;
+  });
+  let html = `<div class="gdi-table-wrap"><table class="gdi-table"><thead><tr>
+    <th>Quiosque</th><th>Mês</th><th class="num">Dias</th><th class="num">Total Mensal</th><th class="num">Média/dia</th>
+  </tr></thead><tbody>`;
+  Object.values(byKiosk).sort((a,b)=>a.kName.localeCompare(b.kName)).forEach(r => {
+    html += `<tr><td>${sK(r.kName)}</td><td>${monthLabel(r.mk)}</td>
+      <td class="num">${r.days}</td>
+      <td class="num mo">${R(r.total)}</td>
+      <td class="num mo">${R(r.total/r.days)}</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+  if (result.errors.length) {
+    html += `<div style="font-size:.72rem;color:var(--danger);margin-top:8px">${result.errors.slice(0,5).join('<br>')}</div>`;
+  }
+  html += `<div style="font-size:.72rem;color:var(--muted);margin-top:6px">${result.rows.length} dias importados${result.errors.length?' · '+result.errors.length+' erros':''}</div>`;
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+async function saveDailyGoals() {
+  if (!_pendingDailyGoals?.length) return;
+  const btn = document.getElementById('btnSaveDailyGoals');
+  if (btn) btn.disabled = true;
+  showStatus('Salvando metas diárias…', 'dim');
+
+  // Merge into goals
+  _pendingDailyGoals.forEach(({dateKey, kName, meta}) => {
+    ensureKiosk(kName);
+    if (!goals.kiosks[kName].dailyByDate) goals.kiosks[kName].dailyByDate = {};
+    goals.kiosks[kName].dailyByDate[dateKey] = meta;
+  });
+
+  // Derive monthlyByMonth and weeklyOverride from dailyByDate for each kiosk
+  for (const kn of Object.keys(goals.kiosks)) {
+    const G = goals.kiosks[kn];
+    if (!G.dailyByDate || !Object.keys(G.dailyByDate).length) continue;
+
+    // Monthly: sum per YYYY-MM
+    const monthly = {};
+    Object.entries(G.dailyByDate).forEach(([d,v]) => {
+      const mk = d.slice(0,7);
+      monthly[mk] = (monthly[mk]||0) + v;
+    });
+    // Merge — only overwrite months that exist in the CSV (don't clear manual months)
+    Object.entries(monthly).forEach(([mk,v]) => { G.monthlyByMonth[mk] = v; });
+
+    // Weekly: sum per Mon key
+    const weekly = {};
+    Object.entries(G.dailyByDate).forEach(([d,v]) => {
+      const dt  = new Date(d+'T00:00:00');
+      const dow = dt.getDay();
+      const daysBack = dow===0 ? 6 : dow-1;
+      const mon = new Date(dt); mon.setDate(mon.getDate()-daysBack);
+      const monKey = mon.toISOString().slice(0,10);
+      weekly[monKey] = (weekly[monKey]||0) + v;
+    });
+    // Merge — only overwrite weeks present in CSV
+    Object.entries(weekly).forEach(([wk,v]) => { G.weeklyOverride[wk] = v; });
+  }
+
+  try {
+    await saveAllGoals();
+    toast('Metas diárias salvas ✓', 'ok');
+    _pendingDailyGoals = null;
+    renderGoals();
+  } catch(e) {
+    showStatus('Erro: '+e.message, 'err');
+    if (btn) btn.disabled = false;
+  }
+}
 
 function clearMonthGoals() {
   if (!confirm(`Limpar todas as metas de ${monthLabel(goalsSelMonth)}?`)) return;
