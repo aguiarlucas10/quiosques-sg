@@ -1434,25 +1434,11 @@ let geralPeriod = null;  // YYYY-MM
 let geralWeek   = null;  // YYYY-MM-DD (monKey) ou null = mês completo
 let geralDay    = null;  // YYYY-MM-DD selected day for opening panel (null = today)
 
-function setGeralPeriod(val) {
-  geralPeriod = val;
-  geralWeek   = null;
-  renderGeral();
-}
-function setGeralWeek(val) {
-  geralWeek = val || null;
-  renderGeral();
-}
-function setGeralDay(val) {
-  geralDay = val || null;
-  renderGeral();
-}
+// (duplicate setGeralPeriod removed)
+// (duplicate setGeralWeek removed)
+// (duplicate setGeralDay removed)
 
-function setGeralPeriod(val) {
-  geralPeriod = val;
-  geralWeek   = null;
-  renderGeral();
-}
+// (duplicate setGeralPeriod removed)
 function setGeralWeek(val) {
   geralWeek = val || null;
   renderGeral();
@@ -2370,6 +2356,7 @@ function setConsolidadoWeek(val)   { geralWeek = val || null; renderConsolidado(
 //  RENDER QUIOSQUES (responsivo, sem overflow)
 // ══════════════════════════════════════════════════════════
 function renderKiosques() {
+  try {
   const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
   if (!ks.length) {
     document.getElementById('kiosquesBody').innerHTML =
@@ -2501,6 +2488,7 @@ function renderKiosques() {
 
   setTimeout(() => {
     ks.forEach((k,ki) => {
+      try {
       const cv = document.getElementById('cd'+ki); if (!cv) return;
       destroyChart('cd'+ki);
       const dates = Object.keys(k.byDate).sort();
@@ -2513,8 +2501,10 @@ function renderKiosques() {
           y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
         }}
       });
+      } catch(e) { console.warn('kiosques chart:', e.message); }
     });
   }, 100);
+  } catch(e) { console.error('renderKiosques ERROR:', e.message, e.stack?.split('\n')[1]); }
 }
 
 let goalsSelMonth = null;
@@ -3141,6 +3131,106 @@ function clearMonthGoals() {
   saveAllGoals().then(() => renderGoals());
 }
 
+
+// ── Import panel functions ───────────────────────────
+let rawCSV = null;
+
+function resetLog() {
+  const lb = document.getElementById('logbox');
+  if (lb) lb.innerHTML = '';
+}
+function log(msg, cls='dim') {
+  const lb = document.getElementById('logbox');
+  if (!lb) return;
+  const d = document.createElement('div');
+  d.className = 'll ' + cls;
+  d.textContent = msg;
+  lb.appendChild(d);
+  lb.scrollTop = lb.scrollHeight;
+}
+function preview(text) {
+  const rows = parseCSVProper(text);
+  log(`Preview: ${rows.length} linhas · ${rows[0]?.length||0} colunas`, 'dim');
+}
+function onFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  resetLog();
+  log(`📄 ${f.name}  (${(f.size/1024).toFixed(1)} KB)`, 'info');
+  const r = new FileReader();
+  r.onload = ev => {
+    rawCSV = ev.target.result;
+    const fmt = detectCSVFormat(rawCSV);
+    const isAnalytic = fmt === 'analytic';
+    log(`✓ Lido — ${rawCSV.split('\n').length} linhas · ${isAnalytic ? '✓ Analítico' : '✗ Formato resumido — use o relatório Analítico (VENDEDOR.RPT)'}`, isAnalytic ? 'ok' : 'err');
+    preview(rawCSV);
+    const btn = document.getElementById('btnProc');
+    if (btn) btn.disabled = !isAnalytic;
+  };
+  r.readAsText(f, 'UTF-8');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  const f = e.dataTransfer?.files[0]; if (!f) return;
+  document.getElementById('fi').files; // can't set programmatically
+  const fakeEvt = { target: { files: [f] } };
+  onFile(fakeEvt);
+}
+async function processCSV() {
+  if (!rawCSV) return;
+  if (detectCSVFormat(rawCSV) !== 'analytic') {
+    log('✗ Use o relatório Analítico (VENDEDOR.RPT). Resumido não é mais aceito.', 'err');
+    return;
+  }
+  return processAnalyticCSV();
+}
+
+
+// ══════════════════════════════════════════════════════════
+//  IMPORT MODULE — File reading, logging, CSV processing
+// ══════════════════════════════════════════════════════════
+// rawCSV declared above
+
+function log(msg, cls) {
+  const box = document.getElementById('logbox');
+  if (!box) return;
+  const el = document.createElement('div');
+  el.className = 'll ' + (cls||'dim');
+  el.textContent = msg;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+function resetLog() {
+  const box = document.getElementById('logbox');
+  if (box) box.innerHTML = '';
+}
+function preview(text) {
+  const lines = text.split('\n').slice(0,6);
+  log('Prévia:', 'dim');
+  lines.forEach(l => { if (l.trim()) log('  '+l.slice(0,120), 'dim'); });
+}
+function onFile(evt) {
+  const f = evt.target.files[0]; if (!f) return;
+  resetLog();
+  log('📄 '+f.name+'  ('+(f.size/1024).toFixed(1)+' KB)', 'info');
+  const r = new FileReader();
+  r.onload = ev => {
+    rawCSV = ev.target.result;
+    const fmt = detectCSVFormat(rawCSV);
+    const ok = fmt === 'analytic';
+    log('✓ Lido — '+rawCSV.split('\n').length+' linhas · '+(ok?'✓ Analítico':'✗ Formato resumido — use o relatório Analítico (VENDEDOR.RPT)'), ok?'ok':'err');
+    preview(rawCSV);
+    document.getElementById('btnProc').disabled = !ok;
+  };
+  r.readAsText(f, 'latin-1');
+}
+async function processCSV() {
+  if (!rawCSV) return;
+  if (detectCSVFormat(rawCSV) !== 'analytic') {
+    log('✗ Use o relatório Analítico (VENDEDOR.RPT). Resumido não é mais aceito.', 'err');
+    return;
+  }
+  return processAnalyticCSV();
+}
 
 // ══════════════════════════════════════════════════════════
 //  ANALYTIC CSV PARSER  
