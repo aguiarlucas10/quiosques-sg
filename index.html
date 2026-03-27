@@ -1570,6 +1570,41 @@ function activeSellers(kName) {
 }
 
 // Última data de venda registrada num quiosque
+
+// ── Month-filtered totals ────────────────────────────────
+function kioskMonthLiq(kName, monthKey) {
+  if (!monthKey) return store.kiosks[kName]?.liq || 0;
+  const byDate = store.kiosks[kName]?.byDate || {};
+  return Object.entries(byDate)
+    .filter(([d]) => d.slice(0,7) === monthKey)
+    .reduce((s,[,v]) => s+(v.liq||0), 0);
+}
+function kioskMonthPecas(kName, monthKey) {
+  if (!monthKey) return store.kiosks[kName]?.pecas || 0;
+  const byDate = store.kiosks[kName]?.byDate || {};
+  return Object.entries(byDate)
+    .filter(([d]) => d.slice(0,7) === monthKey)
+    .reduce((s,[,v]) => s+(v.pecas||0), 0);
+}
+function sellerMonthLiq(kName, sName, monthKey) {
+  if (!monthKey) return store.kiosks[kName]?.sellers?.[sName]?.liq || 0;
+  const byDate = store.kiosks[kName]?.sellers?.[sName]?.byDate || {};
+  return Object.entries(byDate)
+    .filter(([d]) => d.slice(0,7) === monthKey)
+    .reduce((s,[,v]) => s+(v.liq||0), 0);
+}
+function sellerMonthPecas(kName, sName, monthKey) {
+  if (!monthKey) return store.kiosks[kName]?.sellers?.[sName]?.pecas || 0;
+  const byDate = store.kiosks[kName]?.sellers?.[sName]?.byDate || {};
+  return Object.entries(byDate)
+    .filter(([d]) => d.slice(0,7) === monthKey)
+    .reduce((s,[,v]) => s+(v.pecas||0), 0);
+}
+function sellerMonthDias(kName, sName, monthKey) {
+  const byDate = store.kiosks[kName]?.sellers?.[sName]?.byDate || {};
+  return Object.keys(byDate)
+    .filter(d => (!monthKey || d.slice(0,7) === monthKey) && (byDate[d].liq||0) > 0).length;
+}
 function kioskLastSale(kName) {
   const dates = Object.keys((store.kiosks[kName]||{}).byDate||{}).sort();
   if (!dates.length) return null;
@@ -1744,7 +1779,7 @@ function renderGeral() {
     // Card totals for selected period
     let kLiq, kGoal, kPct;
     if (isMonth) {
-      kLiq  = k.liq;
+      kLiq  = kioskMonthLiq(kName, selMonth);
       kGoal = kioskMonthGoal(kName, selMonth);
     } else {
       kLiq  = kWeekLiq(kName, wctxSel.monday, wctxSel.sunday);
@@ -1780,14 +1815,14 @@ function renderGeral() {
     sls.forEach((s, si) => {
       let sLiq, sGoal;
       if (isMonth) {
-        sLiq  = s.liq || 0;
+        sLiq  = sellerMonthLiq(kName, s.name, selMonth);
         sGoal = sellerMonthGoal(kName, selMonth);
       } else {
         sLiq  = sWeekLiq(kName, s.name, wctxSel.monday, wctxSel.sunday);
         sGoal = sellerWeekGoal(kName, geralWeek);
       }
       const sPct = sGoal>0 ? (sLiq/sGoal)*100 : 0;
-      const pcs  = isMonth ? (s.pecas||0) : sWeekPcs(kName, s.name, wctxSel?.monday, wctxSel?.sunday);
+      const pcs  = isMonth ? sellerMonthPecas(kName, s.name, selMonth) : sWeekPcs(kName, s.name, wctxSel?.monday, wctxSel?.sunday);
 
       h += `<div class="gc-seller-row">
         <span class="gc-seller-name">${si===0?'<span class="star">★</span>':''}${s.name}</span>
@@ -2195,8 +2230,8 @@ function renderConsolidado() {
   let totLiq = 0, totPecas = 0, totGoal = 0;
   ks.forEach(k => {
     if (isMonth) {
-      totLiq   += k.liq;
-      totPecas += k.pecas;
+      totLiq   += kioskMonthLiq(k.name, selMonth);
+      totPecas += kioskMonthPecas(k.name, selMonth);
       totGoal  += kioskMonthGoal(k.name, selMonth);
     } else {
       totLiq   += kWeekLiq(k.name, wctxSel.monday, wctxSel.sunday);
@@ -2239,7 +2274,7 @@ function renderConsolidado() {
     const sc   = Object.keys(k.sellers).length;
     let kLiq, kPcs, kGoal, kTk;
     if (isMonth) {
-      kLiq = k.liq; kPcs = k.pecas;
+      kLiq = kioskMonthLiq(k.name, selMonth); kPcs = kioskMonthPecas(k.name, selMonth);
       kGoal = kioskMonthGoal(k.name, selMonth);
     } else {
       kLiq = kWeekLiq(k.name, wctxSel.monday, wctxSel.sunday);
@@ -2276,7 +2311,7 @@ function renderConsolidado() {
     const isAct = !cfg || activeSellers(kName).includes(s.name);
     let sLiq, sPcs, sGoal;
     if (isMonth) {
-      sLiq = s.liq||0; sPcs = s.pecas||0;
+      sLiq = sellerMonthLiq(kName, s.name, selMonth); sPcs = sellerMonthPecas(kName, s.name, selMonth);
       sGoal = sellerMonthGoal(kName, selMonth);
     } else {
       sLiq  = sWeekLiq(kName, s.name, wctxSel.monday, wctxSel.sunday);
@@ -2288,7 +2323,7 @@ function renderConsolidado() {
       h += `<tr class="inactive"><td class="rank-num">—</td><td>${s.name}<span class="tag-inactive">inativo</span></td>
         <td style="font-size:.8rem;color:var(--muted)">${sK(kName)}</td>
         <td class="mo num">${R(sLiq)}</td><td class="num">${sPcs}</td>
-        <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
+        <td class="num">${isMonth?sellerMonthDias(kName,s.name,selMonth):(s.dias||0)}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
         <td>—</td>
       </tr>`;
       return;
@@ -2300,7 +2335,7 @@ function renderConsolidado() {
       <td class="rank-num">${rank}</td><td><strong>${s.name}</strong></td>
       <td style="color:var(--muted);font-size:.8rem">${sK(kName)}</td>
       <td class="mo num">${R(sLiq)}</td><td class="num">${sPcs}</td>
-      <td class="num">${s.dias||0}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
+      <td class="num">${isMonth?sellerMonthDias(kName,s.name,selMonth):(s.dias||0)}</td><td class="mo num">${tk2>0?R(tk2):'—'}</td>
       <td>${gBar(sLiq,sGoal)}${prize?`<span class="gbadge ${prize.label.toLowerCase()}" style="margin-left:4px">${prize.label} +R$${prize.prize}</span>`:''}</td>
     </tr>`;
   });
@@ -2336,7 +2371,7 @@ function renderConsolidado() {
 
   setTimeout(() => {
     const labels  = ks.map(k => sK(k.name));
-    const barData = ks.map(k => isMonth ? k.liq : kWeekLiq(k.name, wctxSel?.monday, wctxSel?.sunday));
+    const barData = ks.map(k => isMonth ? kioskMonthLiq(k.name, selMonth) : kWeekLiq(k.name, wctxSel?.monday, wctxSel?.sunday));
     chartInstances['cBar'] = new Chart(document.getElementById('cBar'), {
       type:'bar', data:{labels,datasets:[{data:barData,backgroundColor:CLRS,borderRadius:4,borderSkipped:false}]},
       options:{responsive:true,plugins:{legend:{display:false}},scales:{
@@ -2359,7 +2394,13 @@ function setConsolidadoWeek(val)   { geralWeek = val || null; renderConsolidado(
 // ══════════════════════════════════════════════════════════
 function renderKiosques() {
   try {
-  const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
+  if (!geralPeriod) {
+    const dm = (store.dateRange||[]).map(d=>d.slice(0,7)).sort();
+    geralPeriod = dm[dm.length-1] || '';
+  }
+  const selMonth = geralPeriod;
+  const ks = Object.values(store.kiosks).sort((a,b) =>
+    kioskMonthLiq(b.name, selMonth) - kioskMonthLiq(a.name, selMonth));
   if (!ks.length) {
     document.getElementById('kiosquesBody').innerHTML =
       '<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado</div></div>';
@@ -2370,13 +2411,17 @@ function renderKiosques() {
 
   let h = '';
   ks.forEach((k, ki) => {
-    const sls    = Object.values(k.sellers).sort((a,b) => (b.liq||0)-(a.liq||0));
-    const dates  = Object.keys(k.byDate).sort();
-    const nActive= activeSellers(k.name).length || Object.keys(k.sellers).length;
-    const gm     = kioskMonthGoal(k.name, wctx?.monthKey||'');
-    const gw     = kioskWeekGoal(k.name, wKey);
-    const wLiq   = wctx ? kWeekLiq(k.name, wctx.monday, wctx.sunday) : 0;
-    const pM     = gm>0 ? Math.min((k.liq/gm)*100,100) : 0;
+    const kName  = k.name;
+    const kLiqM  = kioskMonthLiq(kName, selMonth);
+    const kPcsM  = kioskMonthPecas(kName, selMonth);
+    const sls    = Object.values(k.sellers)
+      .sort((a,b) => sellerMonthLiq(kName,b.name,selMonth) - sellerMonthLiq(kName,a.name,selMonth));
+    const dates  = Object.keys(k.byDate).filter(d=>d.slice(0,7)===selMonth).sort();
+    const nActive= activeSellers(kName).length || Object.keys(k.sellers).length;
+    const gm     = kioskMonthGoal(kName, selMonth);
+    const gw     = kioskWeekGoal(kName, wKey);
+    const wLiq   = wctx ? kWeekLiq(kName, wctx.monday, wctx.sunday) : 0;
+    const pM     = gm>0 ? Math.min((kLiqM/gm)*100,100) : 0;
     const pW     = gw>0 ? Math.min((wLiq/gw)*100,100) : 0;
 
     h += `<div class="kiosk-section">
@@ -2387,7 +2432,7 @@ function renderKiosques() {
         </div>
         <div class="ks-total">
           <div class="ks-total-lbl">Faturamento Líquido</div>
-          <div class="ks-total-val">${R(k.liq)}</div>
+          <div class="ks-total-val">${R(kLiqM)}</div>
         </div>
       </div>`;
 
@@ -2398,7 +2443,7 @@ function renderKiosques() {
         h += `<div class="ks-goal-item">
           <div class="ks-goal-lbl">Meta Mensal <span class="ks-goal-n">${nActive} vend.</span></div>
           <div class="ks-goal-row">
-            <span class="ks-goal-val">${R(k.liq)}</span>
+            <span class="ks-goal-val">${R(kLiqM)}</span>
             <span class="ks-goal-pct" style="color:${gColor(pM)}">${floorPct(pM)}%</span>
           </div>
           <div class="ks-goal-sub">de ${R(gm)}</div>
@@ -2420,9 +2465,9 @@ function renderKiosques() {
     }
 
     // Stat pills
-    const tk = k.pecas > 0 ? k.liq/k.pecas : 0;
+    const tk = kPcsM > 0 ? kLiqM/kPcsM : 0;
     h += `<div class="ks-stats">
-      <div class="ks-stat"><div class="ks-stat-l">Peças</div><div class="ks-stat-v">${k.pecas.toLocaleString('pt-BR')}</div></div>
+      <div class="ks-stat"><div class="ks-stat-l">Peças</div><div class="ks-stat-v">${kPcsM.toLocaleString('pt-BR')}</div></div>
       <div class="ks-stat"><div class="ks-stat-l">Ticket</div><div class="ks-stat-v">${tk>0?R(tk):'—'}</div></div>
       ${wctx?`<div class="ks-stat"><div class="ks-stat-l">Semana</div><div class="ks-stat-v">${R(wLiq)}</div></div>`:''}
     </div>`;
@@ -2432,13 +2477,13 @@ function renderKiosques() {
     <div class="ks-sellers">`;
 
     sls.forEach((s, si) => {
-      const kName  = k.name;
       const cfg    = activeSellers(kName).length > 0;
       const isAct  = !cfg || activeSellers(kName).includes(s.name);
-      const sgm    = sellerMonthGoal(kName, wctx?.monthKey||'');
+      const sLiqM  = sellerMonthLiq(kName, s.name, selMonth);
+      const sgm    = sellerMonthGoal(kName, selMonth);
       const sgw    = sellerWeekGoal(kName, wKey);
       const swL    = wctx ? sWeekLiq(kName, s.name, wctx.monday, wctx.sunday) : 0;
-      const spM    = sgm > 0 ? (s.liq||0)/sgm*100 : 0;
+      const spM    = sgm > 0 ? sLiqM/sgm*100 : 0;
       const spW    = sgw > 0 ? swL/sgw*100 : 0;
       const prize  = sgw>0 ? prizeForPct(spW) : null;
       const mPrize = sgm>0 ? prizeForPctMonthly(spM) : null;
@@ -2446,15 +2491,15 @@ function renderKiosques() {
       h += `<div class="ks-seller-card${!isAct?' inactive':''}">
         <div class="ks-sc-head">
           <span class="ks-sc-name">${si===0&&isAct?'<span class="star">★</span>':''}${s.name}${!isAct?'<span class="tag-inactive">inativo</span>':''}</span>
-          <span class="ks-sc-pcs">${s.pecas||0} pçs</span>
+          <span class="ks-sc-pcs">${sellerMonthPecas(kName,s.name,selMonth)} pçs</span>
         </div>
-        <div class="ks-sc-liq">${R(s.liq||0)}</div>`;
+        <div class="ks-sc-liq">${R(sLiqM)}</div>`;
 
       if (isAct) {
         if (sgm) {
           h += `<div class="ks-sc-goal">
             <div class="ks-sc-goal-row">
-              <span style="font-size:.65rem;color:var(--muted)">Mês ${R(s.liq||0)}</span>
+              <span style="font-size:.65rem;color:var(--muted)">Mês ${R(sLiqM)}</span>
               <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spM)}">${floorPct(spM)}%</span>
             </div>
             <div class="mb"><div class="mf" style="width:${Math.min(spM,100)}%;background:${gColor(spM)}"></div></div>
@@ -2494,7 +2539,7 @@ function renderKiosques() {
       try {
       const cv = document.getElementById('cd'+ki); if (!cv) return;
       destroyChart('cd'+ki);
-      const dates = Object.keys(k.byDate).sort();
+      const dates = Object.keys(k.byDate).filter(d=>d.slice(0,7)===selMonth).sort();
       const vals  = dates.map(d => k.byDate[d].liq);
       chartInstances['cd'+ki] = new Chart(cv, {
         type:'line',
