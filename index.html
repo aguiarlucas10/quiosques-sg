@@ -78,8 +78,8 @@ const ROLES = {
 const ROLE_TABS = {
   vendedor:    ['geral','kiosques'],
   gerente:     ['geral','kiosques','consolidado','premiacoes'],
-  coordenador: ['geral','kiosques','consolidado','premiacoes','estoque','goals','aprovacao'],
-  admin:       ['geral','kiosques','consolidado','premiacoes','estoque','import','goals','aprovacao'],
+  coordenador: ['geral','kiosques','consolidado','premiacoes','financeiro','estoque','goals','aprovacao'],
+  admin:       ['geral','kiosques','consolidado','premiacoes','financeiro','estoque','import','goals','aprovacao'],
 };
 
 function canAccessTab(tab) {
@@ -685,6 +685,27 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
 .sku-kiosk-row:hover td{background:rgba(255,255,255,.04)}
 .sku-kiosk-hint{font-size:.65rem;color:var(--muted);margin-left:5px;opacity:.6}
 
+/* ── FINANCEIRO MODULE ── */
+.fin-toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px}
+.fin-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.fin-kpi{background:var(--surface2);padding:10px 14px;text-align:center}
+.fin-kpi-v{font-family:var(--mono);font-size:1rem;margin-bottom:2px}
+.fin-kpi-l{font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.fin-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.fin-table thead th{text-align:left;color:var(--muted);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap}
+.fin-row td{padding:8px 12px;border-bottom:1px solid rgba(42,42,42,.4)}
+.fin-row:hover td{background:var(--surface2)}
+.fin-row.fin-ok td{background:rgba(76,175,125,.04)}
+.fin-date{font-family:var(--mono);font-size:.8rem;white-space:nowrap}
+.fin-mono{font-family:var(--mono);font-size:.8rem}
+.fin-has-val{color:var(--text)}
+.fin-total{font-weight:600}
+.fin-totals td{padding:10px 12px;border-top:2px solid var(--border);background:var(--surface2)}
+.fin-flag{background:none;border:1px solid var(--border);border-radius:4px;width:28px;height:24px;color:var(--muted);cursor:pointer;font-size:.8rem;transition:all .15s}
+.fin-flag:hover{border-color:#555;color:var(--text)}
+.fin-flag.on{background:rgba(76,175,125,.15);border-color:var(--success);color:var(--success)}
+@media(max-width:640px){.fin-kpis{grid-template-columns:repeat(3,1fr)}}
+
 /* ── ESTOQUE IMPORT PANEL ── */
 .stock-import-panel{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:14px}
 .stock-import-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -832,6 +853,7 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
     <button class="tab" data-tab="kiosques" onclick="nav('kiosques',this)">Quiosques</button>
     <button class="tab admin-only" data-tab="consolidado" id="tabConsolidado" onclick="nav('consolidado',this)">Consolidado</button>
     <button class="tab admin-only" data-tab="premiacoes" id="tabPremiacoes" onclick="nav('premiacoes',this)">Premiações</button>
+    <button class="tab admin-only" data-tab="financeiro" id="tabFinanceiro" onclick="nav('financeiro',this)">Financeiro</button>
     <button class="tab admin-only" data-tab="aprovacao" id="tabAprovacao"     onclick="nav('aprovacao',this)">Aprovação</button>
     <button class="tab admin-only" data-tab="estoque" id="tabEstoque"     onclick="nav('estoque',this)">Estoque</button>
     <button class="tab admin-only" data-tab="import" id="tabImport"      onclick="nav('import',this)">Importar</button>
@@ -871,6 +893,12 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
   <div class="h1">Estoque</div>
   <div class="sub">Produtos, SKUs e reposição por quiosque</div>
   <div id="estoqueBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
+</section>
+
+<section class="pnl" id="pnl-financeiro">
+  <div class="h1">Financeiro</div>
+  <div class="sub">Conferência de caixa e conciliação bancária por forma de pagamento</div>
+  <div id="financeiroBody"><div class="empty"><div class="ei">○</div><div class="et">Carregando…</div></div></div>
 </section>
 
 <section class="pnl" id="pnl-aprovacao">
@@ -1174,6 +1202,7 @@ function nav(id,btn){
   if(id==='premiacoes') renderPremiacoes();
   if(id==='estoque') renderEstoque();
   if(id==='aprovacao') renderAprovacao();
+  if(id==='financeiro') renderFinanceiro();
 }
 
 
@@ -1463,7 +1492,7 @@ function weeksInMonth(year, month) {
     const monKey = monday.toISOString().slice(0,10);
     const mLabel = `${monday.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} – ${sunday.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`;
     const crossMonth = monday.getMonth() !== lastDay.getMonth() || sunday.getMonth() !== firstDay.getMonth();
-    weeks.push({ monKey, label: mLabel, monday, sunday, crossMonth, monthKey: ym });
+    weeks.push({ monKey, label: mLabel, monday, sunday, crossMonth, monthKey: ym() });
     cur.setDate(cur.getDate()+7);
   }
   return weeks;
@@ -3161,6 +3190,12 @@ async function processAnalyticCSV() {
     // col[39] = Total de Peças Vendidas na transação
     const txnValor = brNum(r[28]);
     const txnPiecesTotal = parseInt(r[39]||'0') || 0;
+    // Payment method breakdown: col29=Dinheiro col30=Cheque col31=Cartão col32=PIX col33=Vale col34=Depósito
+    const txnPay = {
+      din:  brNum(r[29]), che: brNum(r[30]),
+      car:  brNum(r[31]), pix: brNum(r[32]),
+      vale: brNum(r[33]), dep: brNum(r[34]),
+    };
     const sku     = (r[44]||'').trim();
     const desc    = (r[45]||'').trim();
     const price   = brNum(r[47]);
@@ -3172,7 +3207,7 @@ async function processAnalyticCSV() {
     if (!txnId || !sku) continue;
 
     if (!txnMap[txnId]) txnMap[txnId] = { kName, sName, date, time: time_, items:[], txnId,
-                                           liq: txnValor, pcs: txnPiecesTotal };
+                                           liq: txnValor, pcs: txnPiecesTotal, pay: txnPay };
     txnMap[txnId].items.push({ sku, desc, price, listPrice:listP, op, qty:qtySold, qtyX:qtyXch });
   }
 
@@ -3216,6 +3251,17 @@ async function processAnalyticCSV() {
     sellerTotals[stk].pecas  += txnPcs;
     sellerTotals[stk].trocas += txnTroca;
     if (date) sellerTotals[stk].dates.add(date);
+
+    // Aggregate payments for Financeiro module
+    if (!window._payAgg) window._payAgg = {};
+    if (date) {
+      if (!window._payAgg[kName]) window._payAgg[kName] = {};
+      if (!window._payAgg[kName][date]) window._payAgg[kName][date] = {din:0,che:0,car:0,pix:0,vale:0,dep:0,total:0,n:0};
+      const pa = window._payAgg[kName][date];
+      pa.din   += txnPay.din;  pa.che  += txnPay.che;  pa.car  += txnPay.car;
+      pa.pix   += txnPay.pix;  pa.vale += txnPay.vale; pa.dep  += txnPay.dep;
+      pa.total += txnLiq;      pa.n    += 1;
+    }
 
     // Store transaction detail for analytics
     existingTxnDetails[txnId] = {
@@ -3295,6 +3341,7 @@ async function processAnalyticCSV() {
     const newAnalytics = {
       skus: existingSkus,
       transactions: existingTxnDetails,
+      payments: window._payAgg || {},
       importedAt: newStore.importedAt,
       period, dateRange: newStore.dateRange
     };
@@ -4060,6 +4107,173 @@ function exportReposicao() {
 
 
 
+
+// ══════════════════════════════════════════════════════════
+//  MÓDULO FINANCEIRO — Conferência de caixa e conciliação
+// ══════════════════════════════════════════════════════════
+
+let finKiosk = '';   // filter by kiosk ('' = all)
+let finMonth = '';   // filter by month YYYY-MM
+let finFlags = {};   // { [kiosk+'|'+date]: true } — OK flags, persisted in localStorage
+
+function loadFinFlags() {
+  try { finFlags = JSON.parse(localStorage.getItem('fin_flags')||'{}'); } catch { finFlags = {}; }
+}
+function saveFinFlag(key, val) {
+  finFlags[key] = val;
+  try { localStorage.setItem('fin_flags', JSON.stringify(finFlags)); } catch {}
+}
+
+function setFinKiosk(v) { finKiosk=v; renderFinanceiro(); }
+function setFinMonth(v) { finMonth=v; renderFinanceiro(); }
+
+function renderFinanceiro() {
+  const el = document.getElementById('financeiroBody');
+  if (!el) return;
+  loadFinFlags();
+
+  const analytics = window._analytics;
+  const payments = analytics?.payments || {};
+
+  if (!Object.keys(payments).length) {
+    el.innerHTML = `<div class="empty"><div class="ei">○</div>
+      <div class="et">Sem dados financeiros</div>
+      <div class="eh">Importe o relatório analítico para visualizar os recebimentos por forma de pagamento.</div>
+    </div>`;
+    return;
+  }
+
+  const ks = Object.values(store.kiosks).sort((a,b)=>b.liq-a.liq).map(k=>k.name);
+  const months = availableMonths();
+  if (!finMonth) finMonth = months[months.length-1] || '';
+
+  // Build month options from payments data
+  const payMonths = new Set();
+  Object.values(payments).forEach(byDate =>
+    Object.keys(byDate).forEach(d => payMonths.add(d.slice(0,7)))
+  );
+  const sortedMonths = [...payMonths].sort();
+
+  // ── Toolbar ──
+  let h = `<div class="fin-toolbar">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="geral-filter-item">
+        <label class="geral-month-lbl">Mês</label>
+        <select class="geral-month-sel" onchange="setFinMonth(this.value)">
+          ${sortedMonths.map(m=>`<option value="${m}"${m===finMonth?' selected':''}>${monthLabel(m)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="geral-filter-item">
+        <label class="geral-month-lbl">Quiosque</label>
+        <select class="geral-month-sel" onchange="setFinKiosk(this.value)">
+          <option value="">Todos</option>
+          ${ks.map(kn=>`<option value="${kn}"${finKiosk===kn?' selected':''}>${sK(kn)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="font-size:.72rem;color:var(--muted)">✓ = conciliado</div>
+  </div>`;
+
+  // Collect rows for selected month+kiosk
+  const rows = [];
+  const kiosksToShow = finKiosk ? [finKiosk] : ks;
+  kiosksToShow.forEach(kn => {
+    const byDate = payments[kn] || {};
+    Object.entries(byDate)
+      .filter(([d]) => d.slice(0,7) === finMonth)
+      .sort(([a],[b]) => a.localeCompare(b))
+      .forEach(([date, p]) => rows.push({ kiosk:kn, date, ...p }));
+  });
+
+  if (!rows.length) {
+    h += `<div style="color:var(--muted);padding:20px">Nenhum dado para o período selecionado.</div>`;
+    el.innerHTML = h;
+    return;
+  }
+
+  // Totals
+  const totals = { din:0, che:0, car:0, pix:0, vale:0, dep:0, total:0, n:0 };
+  rows.forEach(r => { ['din','che','car','pix','vale','dep','total','n'].forEach(k=>totals[k]+=r[k]||0); });
+  const okCount = rows.filter(r => finFlags[r.kiosk+'|'+r.date]).length;
+
+  // KPI strip
+  h += `<div class="fin-kpis">
+    <div class="fin-kpi"><div class="fin-kpi-v">${R(totals.total)}</div><div class="fin-kpi-l">Total Recebido</div></div>
+    <div class="fin-kpi"><div class="fin-kpi-v" style="color:#60a5fa">${R(totals.pix)}</div><div class="fin-kpi-l">PIX</div></div>
+    <div class="fin-kpi"><div class="fin-kpi-v" style="color:#34d399">${R(totals.car)}</div><div class="fin-kpi-l">Cartão</div></div>
+    <div class="fin-kpi"><div class="fin-kpi-v" style="color:#f59e0b">${R(totals.din)}</div><div class="fin-kpi-l">Dinheiro</div></div>
+    <div class="fin-kpi"><div class="fin-kpi-v" style="color:#f472b6">${R(totals.vale)}</div><div class="fin-kpi-l">Vale/Troca</div></div>
+    <div class="fin-kpi"><div class="fin-kpi-v">${okCount}/${rows.length}</div><div class="fin-kpi-l">Conferidos</div></div>
+  </div>`;
+
+  // Table
+  const showKioskCol = !finKiosk;
+  h += `<div class="tw tw-scroll"><table class="fin-table">
+    <thead><tr>
+      <th>Data</th>
+      ${showKioskCol ? '<th>Quiosque</th>' : ''}
+      <th class="num">Vendas</th>
+      <th class="num" style="color:#f59e0b">Dinheiro</th>
+      <th class="num" style="color:#34d399">Cartão</th>
+      <th class="num" style="color:#60a5fa">PIX</th>
+      <th class="num" style="color:#f472b6">Vale</th>
+      <th class="num">Total</th>
+      <th style="text-align:center;width:60px">OK</th>
+    </tr></thead><tbody>`;
+
+  let lastDate = '';
+  rows.forEach(r => {
+    const key   = r.kiosk+'|'+r.date;
+    const isOk  = !!finFlags[key];
+    const [y,m,d]= r.date.split('-');
+    const dateLabel = d+'/'+m;
+    const isNewDate = r.date !== lastDate;
+    lastDate = r.date;
+
+    h += `<tr class="fin-row${isOk?' fin-ok':''}">
+      <td class="fin-date">${isNewDate ? dateLabel : ''}</td>
+      ${showKioskCol ? `<td style="font-size:.8rem">${sK(r.kiosk)}</td>` : ''}
+      <td class="num fin-mono">${r.n}</td>
+      <td class="num fin-mono${r.din>0?' fin-has-val':''}">${r.din>0?R(r.din):'—'}</td>
+      <td class="num fin-mono${r.car>0?' fin-has-val':''}">${r.car>0?R(r.car):'—'}</td>
+      <td class="num fin-mono${r.pix>0?' fin-has-val':''}">${r.pix>0?R(r.pix):'—'}</td>
+      <td class="num fin-mono${r.vale>0?' fin-has-val':''}">${r.vale>0?R(r.vale):'—'}</td>
+      <td class="num fin-mono fin-total">${R(r.total)}</td>
+      <td style="text-align:center">
+        <button class="fin-flag${isOk?' on':''}" onclick="toggleFinFlag('${key}',this)"
+          title="${isOk?'Conciliado — clique para desmarcar':'Clique para marcar como conferido'}">
+          ${isOk ? '✓' : '○'}
+        </button>
+      </td>
+    </tr>`;
+  });
+
+  // Totals row
+  h += `<tr class="fin-totals">
+    <td><strong>Total</strong></td>
+    ${showKioskCol ? '<td></td>' : ''}
+    <td class="num fin-mono">${totals.n}</td>
+    <td class="num fin-mono">${totals.din>0?R(totals.din):'—'}</td>
+    <td class="num fin-mono">${totals.car>0?R(totals.car):'—'}</td>
+    <td class="num fin-mono">${R(totals.pix)}</td>
+    <td class="num fin-mono">${totals.vale>0?R(totals.vale):'—'}</td>
+    <td class="num fin-mono fin-total"><strong>${R(totals.total)}</strong></td>
+    <td></td>
+  </tr>`;
+
+  h += `</tbody></table></div>`;
+  h += `<div class="meta-line">Analítico: ${analytics?.importedAt||'—'} · ${analytics?.period||''}</div>`;
+  el.innerHTML = h;
+}
+
+function toggleFinFlag(key, btn) {
+  const isOk = !finFlags[key];
+  saveFinFlag(key, isOk);
+  btn.classList.toggle('on', isOk);
+  btn.textContent = isOk ? '✓' : '○';
+  btn.closest('tr').classList.toggle('fin-ok', isOk);
+}
+
 // ── tryRender — called by Firebase module when data changes ────────────────
 window.tryRender = function tryRender() {
   if (!window._userProfile) return;
@@ -4069,6 +4283,7 @@ window.tryRender = function tryRender() {
     if (tab === 'kiosques')     { renderKiosques();     return; }
     if (tab === 'consolidado')  { renderConsolidado();  return; }
     if (tab === 'premiacoes')   { renderPremiacoes();   return; }
+    if (tab === 'financeiro')   { renderFinanceiro();   return; }
     renderGeral();
   } catch(e) { console.error('tryRender error:', e); }
 };
