@@ -787,6 +787,7 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
 .ks-sc-goal{margin-top:6px}
 .ks-sc-goal-row{display:flex;justify-content:space-between;margin-bottom:3px}
 .ks-chart{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.ks-chart-canvas-wrap{position:relative;height:80px}
 .ks-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 
 /* ── RESPONSIVE ── */
@@ -1776,7 +1777,9 @@ function renderGeral() {
     const nActive = active.length || Object.keys(k.sellers).length;
     const sls     = Object.values(k.sellers)
       .filter(s => !active.length || active.includes(s.name))
-      .sort((a,b) => (b.liq||0)-(a.liq||0));
+      .sort((a,b) => isMonth
+        ? sellerMonthLiq(kName,b.name,selMonth) - sellerMonthLiq(kName,a.name,selMonth)
+        : sWeekLiq(kName,b.name,wctxSel.monday,wctxSel.sunday) - sWeekLiq(kName,a.name,wctxSel.monday,wctxSel.sunday));
     const cardId  = `gc-${ki}`;
 
     // Card totals for selected period
@@ -2592,7 +2595,7 @@ function renderKiosques() {
     // ── Daily chart (clickable sellers filter) ───────
     h += `<div class="ks-chart">
       <div class="ks-chart-lbl">Faturamento Líquido Diário${wctx?' · '+wctx.label:' · '+monthLabel(selMonth)}</div>
-      <canvas id="cd${ki}" height="60"></canvas>
+      <div class="ks-chart-canvas-wrap"><canvas id="cd${ki}"></canvas></div>
     </div>`;
 
     h += `</div>`;  // kiosk-section
@@ -2636,7 +2639,7 @@ function renderKiosques() {
             backgroundColor:kc.fill,
             tension:.35,fill:true,pointRadius:2,borderWidth:1.5
           }]},
-          options:{responsive:true,animation:false,maintainAspectRatio:false,
+          options:{responsive:true,animation:false,
             plugins:{legend:{display:false}},scales:{
               x:{grid:{display:false},ticks:{color:'#666',font:{family:'DM Mono',size:9},maxTicksLimit:8}},
               y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
@@ -3027,7 +3030,8 @@ async function saveAllGoals() {
 //  RENDER PREMIAÇÕES (admin-only)
 // ══════════════════════════════════════════════════════════
 function renderPremiacoes() {
-  const ks = Object.values(store.kiosks).sort((a,b) => b.liq - a.liq);
+  const ks = Object.values(store.kiosks).sort((a,b) =>
+    kioskMonthLiq(b.name, geralPeriod||'') - kioskMonthLiq(a.name, geralPeriod||''));
   if (!ks.length) {
     document.getElementById('premiacoesBody').innerHTML =
       '<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado</div></div>';
@@ -3055,19 +3059,21 @@ function renderPremiacoes() {
     <th class="num">%</th><th>Faixa</th><th class="num">Prêmio</th>
   </tr></thead><tbody>`;
 
-  const allSellers = Object.values(store.sellers).sort((a,b)=>b.liq-a.liq);
+  const allSellers = Object.values(store.sellers).sort((a,b) =>
+    sellerMonthLiq(b.kiosk||'', b.name, selMonth) - sellerMonthLiq(a.kiosk||'', a.name, selMonth));
   allSellers.forEach(s => {
     const kName = s.kiosk||'';
     const cfg   = goals.kiosks[kName]?.activeSellers?.length > 0;
-    if (cfg && !activeSellers(kName).includes(s.name)) return; // skip inactive
+    if (cfg && !activeSellers(kName).includes(s.name)) return;
+    const sLiq = sellerMonthLiq(kName, s.name, selMonth);
     const sgm  = sellerMonthGoal(kName, selMonth);
-    const spM  = sgm>0 ? (s.liq||0)/sgm*100 : 0;
+    const spM  = sgm>0 ? sLiq/sgm*100 : 0;
     const mp   = sgm>0 ? prizeForPctMonthly(spM) : null;
     const cls  = mp ? mp.label.toLowerCase() : '';
     h += `<tr>
       <td><strong>${s.name}</strong></td>
       <td style="color:var(--muted);font-size:.8rem">${sK(kName)}</td>
-      <td class="mo num">${R(s.liq||0)}</td>
+      <td class="mo num">${R(sLiq)}</td>
       <td class="mo num">${sgm?R(sgm):'—'}</td>
       <td class="num" style="color:${sgm?gColor(spM):'var(--muted)'}"><strong>${sgm?floorPct(spM)+'%':'—'}</strong></td>
       <td>${mp?`<span class="gbadge ${cls}">${mp.label}</span>`:'<span style="color:var(--muted);font-size:.75rem">—</span>'}</td>
