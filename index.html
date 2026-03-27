@@ -4206,6 +4206,7 @@ function exportReposicao() {
 
 let finKiosk = '';   // filter by kiosk ('' = all)
 let finMonth = '';   // filter by month YYYY-MM
+let finDate  = null; // filter by specific date (null = whole month)
 let finFlags = {};   // { [kiosk+'|'+date]: true } — OK flags, persisted in localStorage
 
 function loadFinFlags() {
@@ -4217,7 +4218,8 @@ function saveFinFlag(key, val) {
 }
 
 function setFinKiosk(v) { finKiosk=v; renderFinanceiro(); }
-function setFinMonth(v) { finMonth=v; renderFinanceiro(); }
+function setFinMonth(v) { finMonth=v; finDate=null; renderFinanceiro(); }
+function setFinDate(v)  { finDate=v||null; renderFinanceiro(); }
 
 function renderFinanceiro() {
   const el = document.getElementById('financeiroBody');
@@ -4246,6 +4248,14 @@ function renderFinanceiro() {
   );
   const sortedMonths = [...payMonths].sort();
 
+  // Build sorted days for selected month (from payment data)
+  const payDaysInMonth = new Set();
+  Object.values(payments).forEach(byDate =>
+    Object.keys(byDate).filter(d => d.slice(0,7) === finMonth)
+      .forEach(d => payDaysInMonth.add(d))
+  );
+  const sortedDays = [...payDaysInMonth].sort();
+
   // ── Toolbar ──
   let h = `<div class="fin-toolbar">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -4253,6 +4263,16 @@ function renderFinanceiro() {
         <label class="geral-month-lbl">Mês</label>
         <select class="geral-month-sel" onchange="setFinMonth(this.value)">
           ${sortedMonths.map(m=>`<option value="${m}"${m===finMonth?' selected':''}>${monthLabel(m)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="geral-filter-item">
+        <label class="geral-month-lbl">Data</label>
+        <select class="geral-month-sel" onchange="setFinDate(this.value)" style="min-width:140px">
+          <option value=""${!finDate?' selected':''}>Mês completo</option>
+          ${sortedDays.map(d => {
+            const [,m,dd] = d.split('-');
+            return `<option value="${d}"${d===finDate?' selected':''}>${dd}/${m}</option>`;
+          }).join('')}
         </select>
       </div>
       <div class="geral-filter-item">
@@ -4272,7 +4292,7 @@ function renderFinanceiro() {
   kiosksToShow.forEach(kn => {
     const byDate = payments[kn] || {};
     Object.entries(byDate)
-      .filter(([d]) => d.slice(0,7) === finMonth)
+      .filter(([d]) => finDate ? d === finDate : d.slice(0,7) === finMonth)
       .sort(([a],[b]) => a.localeCompare(b))
       .forEach(([date, p]) => rows.push({ kiosk:kn, date, ...p }));
   });
