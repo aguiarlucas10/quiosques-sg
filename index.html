@@ -1811,7 +1811,7 @@ function renderGeral() {
       <div class="gc-sellers-head">
         <span>Vendedor</span>
         <span class="num">Mês</span>
-        ${wctx?'<span class="num gc-col-week">Sem.</span>':''}
+        ${wctxSel?'<span class="num gc-col-week">Sem.</span>':''}
         <span class="num">Pçs</span>
         <span>Atingimento</span>
       </div>`;
@@ -1828,13 +1828,13 @@ function renderGeral() {
       const sPct = sGoal>0 ? (sLiq/sGoal)*100 : 0;
       const pcs  = isMonth ? sellerMonthPecas(kName, s.name, selMonth) : sWeekPcs(kName, s.name, wctxSel?.monday, wctxSel?.sunday);
 
-      const swLiq = wctx ? sWeekLiq(kName, s.name, wctxSel.monday, wctxSel.sunday) : 0;
-      const swGoal = wctx ? sellerWeekGoal(kName, geralWeek) : 0;
+      const swLiq = wctxSel ? sWeekLiq(kName, s.name, wctxSel.monday, wctxSel.sunday) : 0;
+      const swGoal = wctxSel ? sellerWeekGoal(kName, geralWeek) : 0;
       const swPct  = swGoal>0 ? swLiq/swGoal*100 : 0;
       h += `<div class="gc-seller-row">
         <span class="gc-seller-name">${si===0?'<span class="star">★</span>':''}${s.name}</span>
         <span class="gc-seller-liq mo num">${R(sLiq)}</span>
-        ${wctx?`<span class="gc-seller-liq mo num gc-col-week" style="color:${swGoal?gColor(swPct):'var(--text)'}">${R(swLiq)}</span>`:''}
+        ${wctxSel?`<span class="gc-seller-liq mo num gc-col-week" style="color:${swGoal?gColor(swPct):'var(--text)'}">${R(swLiq)}</span>`:''}
         <span class="gc-seller-pcs num">${pcs}</span>
         <span class="gc-seller-goal">
           ${sGoal
@@ -2408,7 +2408,7 @@ function renderKiosques() {
   }
   const selMonth = geralPeriod;
   const months   = [...new Set((store.dateRange||[]).map(d=>d.slice(0,7)))].sort();
-  const allWeeks = buildWeeksForMonth(...(selMonth.split('-').map(Number)));
+  const allWeeks = buildWeeksForMonth(selMonth);
   if (geralWeek && !allWeeks.find(w => w.monKey === geralWeek)) geralWeek = null;
   const wctx  = geralWeek ? allWeeks.find(w => w.monKey === geralWeek) : null;
   const wKey  = wctx?.monKey || '';
