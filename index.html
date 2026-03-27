@@ -1199,6 +1199,7 @@ function nav(id,btn){
   if(btn) btn.classList.add('on');
   if(id==='goals') renderGoals();
   if(id==='consolidado') renderConsolidado();
+  if(id==='kiosques') renderKiosques();
   if(id==='premiacoes') renderPremiacoes();
   if(id==='estoque') renderEstoque();
   if(id==='aprovacao') renderAprovacao();
@@ -3309,6 +3310,7 @@ async function processAnalyticCSV() {
     newTxns++;
 
     const { kName, sName, date } = txn;
+    const txnPay = txn.pay || {din:0,che:0,car:0,pix:0,vale:0,dep:0};
     if (date) allDates.add(date);
 
     // Use col[28] = Valor líquido real, col[39] = total peças (from txn header, not item sum)
