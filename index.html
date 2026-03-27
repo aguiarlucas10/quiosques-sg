@@ -128,9 +128,7 @@ onAuthStateChanged(auth, async user => {
           await signOut(auth);
           return;
         }
-        console.log('[AUTH] Profile loaded:', profile.role, profile.status);
         applyRoleUI(profile);
-        console.log('[AUTH] applyRoleUI done, closing auth screens');
         closeAuthScreens();
         // Force render — data may have arrived before profile was set
         setTimeout(() => window.tryRender?.(), 100);
@@ -161,7 +159,6 @@ onAuthStateChanged(auth, async user => {
     window.tryRender?.();
     return;
   }
-  console.log('[AUTH] Not logged in branch, authScreen shown:', document.getElementById('authScreen')?.classList.contains('show'));
   // Not logged in — only reset UI if we were previously logged in
   // (prevents overriding tabs after deliberate signOut for pending/rejected users)
   window._isAdmin     = false;
@@ -179,17 +176,13 @@ function applyRoleUI(profile) {
   const allTabs  = ROLE_TABS[role] || [];
 
   // Show/hide navigation tabs (exclude auth-screen tabs)
-  console.log('[AUTH] applyRoleUI called, role:', role, 'tabs:', allTabs);
   const tabBtns = document.querySelectorAll('.tabs .tab[data-tab]');
-  console.log('[AUTH] Found', tabBtns.length, 'nav tab buttons');
-  // Admin gets ALL tabs unconditionally
   tabBtns.forEach(btn => {
     const tab = btn.dataset.tab;
-    if (role === 'admin') {
-      btn.style.display = '';  // admin sees everything
-    } else {
-      btn.style.display = allTabs.includes(tab) ? '' : 'none';
-    }
+    const visible = role === 'admin' || allTabs.includes(tab);
+    // Use both inline style AND .show class to override .tab.admin-only{display:none}
+    btn.style.display = visible ? 'flex' : 'none';
+    btn.classList.toggle('show', visible);
   });
 
   // User chip
