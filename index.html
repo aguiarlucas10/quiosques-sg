@@ -543,6 +543,8 @@ tr.inactive td{opacity:.35}
 /* Seller table */
 .gc-sellers{border-top:1px solid var(--border)}
 .gc-col-week{color:rgba(255,255,255,.7)}
+.gc-sellers-week .gc-seller-row{grid-template-columns:1fr auto auto auto 140px}
+.gc-sellers-headweek{grid-template-columns:1fr auto auto auto 140px!important}
 .ks-sc-dimmed{opacity:.35;filter:grayscale(.5);transition:opacity .15s}
 .ks-sc-dimmed:hover{opacity:.7}
 .gc-sellers-head{
@@ -787,7 +789,8 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
 .ks-sc-goal{margin-top:6px}
 .ks-sc-goal-row{display:flex;justify-content:space-between;margin-bottom:3px}
 .ks-chart{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
-.ks-chart-canvas-wrap{position:relative;height:80px}
+.ks-chart-canvas-wrap{display:block;width:100%;height:120px}
+.ks-chart-canvas-wrap canvas{display:block;width:100%!important;height:120px!important;max-height:120px}
 .ks-chart-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 
 /* ── RESPONSIVE ── */
@@ -1810,8 +1813,8 @@ function renderGeral() {
     }
 
     // ── Seller rows (no prize badges) ──────────────────
-    h += `<div class="gc-sellers">
-      <div class="gc-sellers-head">
+    h += `<div class="gc-sellers${wctxSel?' gc-sellers-week':''}">
+      <div class="gc-sellers-head gc-sellers-head${wctxSel?'-week':''}">
         <span>Vendedor</span>
         <span class="num">Mês</span>
         ${wctxSel?'<span class="num gc-col-week">Sem.</span>':''}
@@ -1820,9 +1823,10 @@ function renderGeral() {
       </div>`;
 
     sls.forEach((s, si) => {
+      const sLiqMonth = sellerMonthLiq(kName, s.name, selMonth);
       let sLiq, sGoal;
       if (isMonth) {
-        sLiq  = sellerMonthLiq(kName, s.name, selMonth);
+        sLiq  = sLiqMonth;
         sGoal = sellerMonthGoal(kName, selMonth);
       } else {
         sLiq  = sWeekLiq(kName, s.name, wctxSel.monday, wctxSel.sunday);
@@ -1830,14 +1834,12 @@ function renderGeral() {
       }
       const sPct = sGoal>0 ? (sLiq/sGoal)*100 : 0;
       const pcs  = isMonth ? sellerMonthPecas(kName, s.name, selMonth) : sWeekPcs(kName, s.name, wctxSel?.monday, wctxSel?.sunday);
-
-      const swLiq = wctxSel ? sWeekLiq(kName, s.name, wctxSel.monday, wctxSel.sunday) : 0;
       const swGoal = wctxSel ? sellerWeekGoal(kName, geralWeek) : 0;
-      const swPct  = swGoal>0 ? swLiq/swGoal*100 : 0;
+      const swPct  = swGoal>0 ? sLiq/swGoal*100 : 0;
       h += `<div class="gc-seller-row">
         <span class="gc-seller-name">${si===0?'<span class="star">★</span>':''}${s.name}</span>
-        <span class="gc-seller-liq mo num">${R(sLiq)}</span>
-        ${wctxSel?`<span class="gc-seller-liq mo num gc-col-week" style="color:${swGoal?gColor(swPct):'var(--text)'}">${R(swLiq)}</span>`:''}
+        <span class="gc-seller-liq mo num">${R(sLiqMonth)}</span>
+        ${wctxSel?`<span class="gc-seller-liq mo num gc-col-week">${R(sLiq)}</span>`:''}
         <span class="gc-seller-pcs num">${pcs}</span>
         <span class="gc-seller-goal">
           ${sGoal
@@ -2639,7 +2641,7 @@ function renderKiosques() {
             backgroundColor:kc.fill,
             tension:.35,fill:true,pointRadius:2,borderWidth:1.5
           }]},
-          options:{responsive:true,animation:false,
+          options:{responsive:true,animation:false,maintainAspectRatio:false,
             plugins:{legend:{display:false}},scales:{
               x:{grid:{display:false},ticks:{color:'#666',font:{family:'DM Mono',size:9},maxTicksLimit:8}},
               y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
