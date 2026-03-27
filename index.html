@@ -542,6 +542,9 @@ tr.inactive td{opacity:.35}
 
 /* Seller table */
 .gc-sellers{border-top:1px solid var(--border)}
+.gc-col-week{color:rgba(255,255,255,.7)}
+.ks-sc-dimmed{opacity:.35;filter:grayscale(.5);transition:opacity .15s}
+.ks-sc-dimmed:hover{opacity:.7}
 .gc-sellers-head{
   display:grid;grid-template-columns:1fr auto auto 140px;gap:8px;
   padding:8px 18px;
@@ -1807,7 +1810,8 @@ function renderGeral() {
     h += `<div class="gc-sellers">
       <div class="gc-sellers-head">
         <span>Vendedor</span>
-        <span class="num">Líquido</span>
+        <span class="num">Mês</span>
+        ${wctx?'<span class="num gc-col-week">Sem.</span>':''}
         <span class="num">Pçs</span>
         <span>Atingimento</span>
       </div>`;
@@ -1824,9 +1828,13 @@ function renderGeral() {
       const sPct = sGoal>0 ? (sLiq/sGoal)*100 : 0;
       const pcs  = isMonth ? sellerMonthPecas(kName, s.name, selMonth) : sWeekPcs(kName, s.name, wctxSel?.monday, wctxSel?.sunday);
 
+      const swLiq = wctx ? sWeekLiq(kName, s.name, wctxSel.monday, wctxSel.sunday) : 0;
+      const swGoal = wctx ? sellerWeekGoal(kName, geralWeek) : 0;
+      const swPct  = swGoal>0 ? swLiq/swGoal*100 : 0;
       h += `<div class="gc-seller-row">
         <span class="gc-seller-name">${si===0?'<span class="star">★</span>':''}${s.name}</span>
         <span class="gc-seller-liq mo num">${R(sLiq)}</span>
+        ${wctx?`<span class="gc-seller-liq mo num gc-col-week" style="color:${swGoal?gColor(swPct):'var(--text)'}">${R(swLiq)}</span>`:''}
         <span class="gc-seller-pcs num">${pcs}</span>
         <span class="gc-seller-goal">
           ${sGoal
@@ -1917,7 +1925,7 @@ function renderGeral() {
     });
     chartInstances[aggId] = new Chart(aggCanvas, {
       type: 'line',
-      data: { labels: allDates.map(fmtDL), datasets },
+      data: { labels: chartDates.map(fmtDL), datasets },
       options: {
         responsive: true, animation: false, maintainAspectRatio: false,
         plugins: {
@@ -2399,6 +2407,15 @@ function renderKiosques() {
     geralPeriod = dm[dm.length-1] || '';
   }
   const selMonth = geralPeriod;
+  const months   = [...new Set((store.dateRange||[]).map(d=>d.slice(0,7)))].sort();
+  const allWeeks = buildWeeksForMonth(...(selMonth.split('-').map(Number)));
+  if (geralWeek && !allWeeks.find(w => w.monKey === geralWeek)) geralWeek = null;
+  const wctx  = geralWeek ? allWeeks.find(w => w.monKey === geralWeek) : null;
+  const wKey  = wctx?.monKey || '';
+
+  // Init seller selection state if not set
+  if (!window._kqSel) window._kqSel = {};
+
   const ks = Object.values(store.kiosks).sort((a,b) =>
     kioskMonthLiq(b.name, selMonth) - kioskMonthLiq(a.name, selMonth));
   if (!ks.length) {
@@ -2406,154 +2423,246 @@ function renderKiosques() {
       '<div class="empty"><div class="ei">○</div><div class="et">Nenhum dado</div></div>';
     return;
   }
-  const wctx = getWeekCtx();
-  const wKey = wctx?.monKey || '';
 
-  let h = '';
+  // ── Toolbar ──────────────────────────────────────────
+  let h = `<div class="geral-toolbar"><div class="geral-filters">
+    <div class="geral-filter-item">
+      <label class="geral-month-lbl">Mês</label>
+      <select class="geral-month-sel" onchange="setGeralPeriod(this.value)">
+        ${months.map(m=>`<option value="${m}"${m===selMonth?' selected':''}>${monthLabel(m)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="geral-filter-item">
+      <label class="geral-month-lbl">Semana</label>
+      <select class="geral-month-sel" onchange="setGeralWeek(this.value)">
+        <option value=""${!geralWeek?' selected':''}>Mês completo</option>
+        ${allWeeks.map((w,wi)=>`<option value="${w.monKey}"${geralWeek===w.monKey?' selected':''}>S${wi+1} · ${w.label}</option>`).join('')}
+      </select>
+    </div>
+  </div></div>`;
+
   ks.forEach((k, ki) => {
     const kName  = k.name;
+    const kc     = KC[ki % KC.length];
     const kLiqM  = kioskMonthLiq(kName, selMonth);
     const kPcsM  = kioskMonthPecas(kName, selMonth);
-    const sls    = Object.values(k.sellers)
-      .sort((a,b) => sellerMonthLiq(kName,b.name,selMonth) - sellerMonthLiq(kName,a.name,selMonth));
-    const dates  = Object.keys(k.byDate).filter(d=>d.slice(0,7)===selMonth).sort();
-    const nActive= activeSellers(kName).length || Object.keys(k.sellers).length;
     const gm     = kioskMonthGoal(kName, selMonth);
     const gw     = kioskWeekGoal(kName, wKey);
     const wLiq   = wctx ? kWeekLiq(kName, wctx.monday, wctx.sunday) : 0;
     const pM     = gm>0 ? Math.min((kLiqM/gm)*100,100) : 0;
     const pW     = gw>0 ? Math.min((wLiq/gw)*100,100) : 0;
+    const tk     = kPcsM > 0 ? kLiqM/kPcsM : 0;
 
-    h += `<div class="kiosk-section">
+    // Active sellers only
+    const activeSel  = activeSellers(kName);
+    const hasCfg     = activeSel.length > 0;
+    const sls = Object.values(k.sellers)
+      .filter(s => !hasCfg || activeSel.includes(s.name))
+      .sort((a,b) => (wctx
+        ? sWeekLiq(kName,b.name,wctx.monday,wctx.sunday) - sWeekLiq(kName,a.name,wctx.monday,wctx.sunday)
+        : sellerMonthLiq(kName,b.name,selMonth) - sellerMonthLiq(kName,a.name,selMonth)));
+
+    // Check if inactive sellers have sales in period
+    const inactSales = hasCfg ? Object.values(k.sellers)
+      .filter(s => !activeSel.includes(s.name))
+      .reduce((sum,s) => sum + (wctx
+        ? sWeekLiq(kName,s.name,wctx.monday,wctx.sunday)
+        : sellerMonthLiq(kName,s.name,selMonth)), 0) : 0;
+
+    // Init selection: all active sellers selected by default
+    const selKey = `${ki}`;
+    if (!window._kqSel[selKey]) {
+      window._kqSel[selKey] = new Set(sls.map(s=>s.name));
+      if (inactSales > 0) window._kqSel[selKey].add('__inact__');
+    }
+    const selSet = window._kqSel[selKey];
+
+    // ── Kiosk card ───────────────────────────────────
+    h += `<div class="kiosk-section" style="border-top:3px solid ${kc.line}20">
       <div class="ks-header">
         <div>
-          <div class="ks-name">${sK(k.name)}</div>
-          <div class="ks-sub">${k.name} · ${nActive} vendedores ativos</div>
+          <div class="ks-name">${sK(kName)}</div>
+          <div class="ks-sub">${kName} · ${sls.length} vendedor${sls.length!==1?'es':''} ativo${sls.length!==1?'s':''}</div>
         </div>
         <div class="ks-total">
-          <div class="ks-total-lbl">Faturamento Líquido</div>
-          <div class="ks-total-val">${R(kLiqM)}</div>
+          <div class="ks-total-lbl">${wctx?'Semana':'Mês'} · ${wctx?wctx.label:monthLabel(selMonth)}</div>
+          <div class="ks-total-val">${R(wctx?wLiq:kLiqM)}</div>
         </div>
       </div>`;
 
-    // Goal blocks
-    if (gm || gw) {
+    // ── Goal blocks (weekly primary) ─────────────────
+    if (gw || gm) {
       h += `<div class="ks-goals">`;
-      if (gm) {
+      if (gw) {
         h += `<div class="ks-goal-item">
-          <div class="ks-goal-lbl">Meta Mensal <span class="ks-goal-n">${nActive} vend.</span></div>
-          <div class="ks-goal-row">
-            <span class="ks-goal-val">${R(kLiqM)}</span>
-            <span class="ks-goal-pct" style="color:${gColor(pM)}">${floorPct(pM)}%</span>
-          </div>
-          <div class="ks-goal-sub">de ${R(gm)}</div>
-          <div class="ks-goal-bar"><div class="ks-goal-fill" style="width:${pM}%;background:${gColor(pM)}"></div></div>
-        </div>`;
-      }
-      if (gw && wctx) {
-        h += `<div class="ks-goal-item">
-          <div class="ks-goal-lbl">Semana · ${wctx.label} <span class="ks-goal-n">${nActive} vend.</span></div>
+          <div class="ks-goal-lbl">Meta Semanal${wctx?' · '+wctx.label:''}</div>
           <div class="ks-goal-row">
             <span class="ks-goal-val">${R(wLiq)}</span>
             <span class="ks-goal-pct" style="color:${gColor(pW)}">${floorPct(pW)}%</span>
           </div>
           <div class="ks-goal-sub">de ${R(gw)}</div>
-          <div class="ks-goal-bar"><div class="ks-goal-fill" style="width:${pW}%;background:${gColor(pW)}"></div></div>
+          <div class="ks-goal-bar"><div class="ks-goal-fill" style="width:${Math.min(pW,100)}%;background:${gColor(pW)}"></div></div>
+        </div>`;
+      }
+      if (gm) {
+        h += `<div class="ks-goal-item">
+          <div class="ks-goal-lbl">Meta Mensal · ${monthLabel(selMonth)}</div>
+          <div class="ks-goal-row">
+            <span class="ks-goal-val">${R(kLiqM)}</span>
+            <span class="ks-goal-pct" style="color:${gColor(pM)}">${floorPct(pM)}%</span>
+          </div>
+          <div class="ks-goal-sub">de ${R(gm)}</div>
+          <div class="ks-goal-bar"><div class="ks-goal-fill" style="width:${Math.min(pM,100)}%;background:${gColor(pM)}"></div></div>
         </div>`;
       }
       h += `</div>`;
     }
 
-    // Stat pills
-    const tk = kPcsM > 0 ? kLiqM/kPcsM : 0;
+    // ── Stat pills ───────────────────────────────────
     h += `<div class="ks-stats">
-      <div class="ks-stat"><div class="ks-stat-l">Peças</div><div class="ks-stat-v">${kPcsM.toLocaleString('pt-BR')}</div></div>
-      <div class="ks-stat"><div class="ks-stat-l">Ticket</div><div class="ks-stat-v">${tk>0?R(tk):'—'}</div></div>
-      ${wctx?`<div class="ks-stat"><div class="ks-stat-l">Semana</div><div class="ks-stat-v">${R(wLiq)}</div></div>`:''}
+      <div class="ks-stat"><div class="ks-stat-l">Peças ${wctx?'Sem.':'Mês'}</div><div class="ks-stat-v">${(wctx ? Object.values(k.sellers).reduce((s,sl)=>s+sWeekPcs(kName,sl.name,wctx.monday,wctx.sunday),0) : kPcsM).toLocaleString('pt-BR')}</div></div>
+      <div class="ks-stat"><div class="ks-stat-l">Ticket Médio</div><div class="ks-stat-v">${tk>0?R(tk):'—'}</div></div>
+      ${gw&&wctx?`<div class="ks-stat"><div class="ks-stat-l">vs Meta Sem.</div><div class="ks-stat-v" style="color:${gColor(pW)}">${floorPct(pW)}%</div></div>`:''}
     </div>`;
 
-    // Seller cards — responsive grid, no table
-    h += `<div class="ks-sellers-lbl">Vendedores</div>
-    <div class="ks-sellers">`;
+    // ── Seller cards ─────────────────────────────────
+    h += `<div class="ks-sellers-lbl">Vendedores</div><div class="ks-sellers">`;
 
     sls.forEach((s, si) => {
-      const cfg    = activeSellers(kName).length > 0;
-      const isAct  = !cfg || activeSellers(kName).includes(s.name);
       const sLiqM  = sellerMonthLiq(kName, s.name, selMonth);
-      const sgm    = sellerMonthGoal(kName, selMonth);
-      const sgw    = sellerWeekGoal(kName, wKey);
       const swL    = wctx ? sWeekLiq(kName, s.name, wctx.monday, wctx.sunday) : 0;
-      const spM    = sgm > 0 ? sLiqM/sgm*100 : 0;
-      const spW    = sgw > 0 ? swL/sgw*100 : 0;
-      const prize  = sgw>0 ? prizeForPct(spW) : null;
-      const mPrize = sgm>0 ? prizeForPctMonthly(spM) : null;
+      const sgw    = sellerWeekGoal(kName, wKey);
+      const sgm    = sellerMonthGoal(kName, selMonth);
+      const spW    = sgw>0 ? swL/sgw*100 : 0;
+      const spM    = sgm>0 ? sLiqM/sgm*100 : 0;
+      const prizeW = sgw>0 ? prizeForPct(spW) : null;
+      const isSel  = selSet.has(s.name);
+      const displayLiq = wctx ? swL : sLiqM;
+      const displayPct = wctx ? spW : spM;
+      const displayGoal= wctx ? sgw : sgm;
 
-      h += `<div class="ks-seller-card${!isAct?' inactive':''}">
+      h += `<div class="ks-seller-card${isSel?'':' ks-sc-dimmed'}"
+        onclick="kqToggleSeller(${ki},'${s.name.replace(/'/g,"\\'")}',${JSON.stringify([...selSet])})"
+        style="cursor:pointer;border-color:${isSel?kc.border:'var(--border)'}">
         <div class="ks-sc-head">
-          <span class="ks-sc-name">${si===0&&isAct?'<span class="star">★</span>':''}${s.name}${!isAct?'<span class="tag-inactive">inativo</span>':''}</span>
-          <span class="ks-sc-pcs">${sellerMonthPecas(kName,s.name,selMonth)} pçs</span>
+          <span class="ks-sc-name">${si===0?'<span class="star">★</span>':''}${s.name}</span>
+          <span class="ks-sc-pcs">${wctx ? sWeekPcs(kName,s.name,wctx.monday,wctx.sunday) : sellerMonthPecas(kName,s.name,selMonth)} pçs</span>
         </div>
-        <div class="ks-sc-liq">${R(sLiqM)}</div>`;
+        <div class="ks-sc-liq">${R(displayLiq)}</div>`;
 
-      if (isAct) {
-        if (sgm) {
-          h += `<div class="ks-sc-goal">
-            <div class="ks-sc-goal-row">
-              <span style="font-size:.65rem;color:var(--muted)">Mês ${R(sLiqM)}</span>
-              <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spM)}">${floorPct(spM)}%</span>
-            </div>
-            <div class="mb"><div class="mf" style="width:${Math.min(spM,100)}%;background:${gColor(spM)}"></div></div>
-            ${mPrize?`<span class="gbadge ${mPrize.label.toLowerCase()}" style="margin-top:4px">${mPrize.label} +R$${mPrize.prize}</span>`:''}
-          </div>`;
-        }
-        if (sgw && wctx) {
-          h += `<div class="ks-sc-goal">
-            <div class="ks-sc-goal-row">
-              <span style="font-size:.65rem;color:var(--muted)">Sem ${R(swL)}</span>
-              <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spW)}">${floorPct(spW)}%</span>
-            </div>
-            <div class="mb"><div class="mf" style="width:${Math.min(spW,100)}%;background:${gColor(spW)}"></div></div>
-            ${prize?`<span class="gbadge ${prize.label.toLowerCase()}" style="margin-top:4px">${prize.label} +R$${prize.prize}</span>`:''}
-          </div>`;
-        }
+      // Show weekly goal primarily, monthly as secondary
+      if (sgw) {
+        h += `<div class="ks-sc-goal">
+          <div class="ks-sc-goal-row">
+            <span style="font-size:.6rem;color:var(--muted)">Sem ${R(swL)}</span>
+            <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spW)}">${floorPct(spW)}%</span>
+          </div>
+          <div class="mb"><div class="mf" style="width:${Math.min(spW,100)}%;background:${gColor(spW)}"></div></div>
+          ${prizeW?`<span class="gbadge ${prizeW.label.toLowerCase()}" style="margin-top:3px">${prizeW.label} +R$${prizeW.prize}</span>`:''}
+        </div>`;
       }
-      h += `</div>`;  // ks-seller-card
+      if (sgm && !sgw) {
+        const mPrize = prizeForPctMonthly(spM);
+        h += `<div class="ks-sc-goal">
+          <div class="ks-sc-goal-row">
+            <span style="font-size:.6rem;color:var(--muted)">Mês ${R(sLiqM)}</span>
+            <span style="font-family:var(--mono);font-size:.72rem;color:${gColor(spM)}">${floorPct(spM)}%</span>
+          </div>
+          <div class="mb"><div class="mf" style="width:${Math.min(spM,100)}%;background:${gColor(spM)}"></div></div>
+          ${mPrize?`<span class="gbadge ${mPrize.label.toLowerCase()}" style="margin-top:3px">${mPrize.label}</span>`:''}
+        </div>`;
+      }
+      h += `</div>`;
     });
+
+    // Inactive sellers row (if they have sales)
+    if (inactSales > 0) {
+      const isSel = selSet.has('__inact__');
+      h += `<div class="ks-seller-card${isSel?'':' ks-sc-dimmed'}" style="opacity:.5;cursor:pointer"
+        onclick="kqToggleSeller(${ki},'__inact__',${JSON.stringify([...selSet])})">
+        <div class="ks-sc-head">
+          <span class="ks-sc-name" style="color:var(--muted)">Inativos</span>
+        </div>
+        <div class="ks-sc-liq" style="color:var(--muted)">${R(inactSales)}</div>
+      </div>`;
+    }
 
     h += `</div>`;  // ks-sellers
 
-    // Daily chart (optional)
-    if (dates.length > 1) {
-      h += `<div class="ks-chart">
-        <div class="ks-chart-lbl">Faturamento Líquido Diário</div>
-        <canvas id="cd${ki}" height="60"></canvas>
-      </div>`;
-    }
+    // ── Daily chart (clickable sellers filter) ───────
+    h += `<div class="ks-chart">
+      <div class="ks-chart-lbl">Faturamento Líquido Diário${wctx?' · '+wctx.label:' · '+monthLabel(selMonth)}</div>
+      <canvas id="cd${ki}" height="60"></canvas>
+    </div>`;
+
     h += `</div>`;  // kiosk-section
   });
 
   document.getElementById('kiosquesBody').innerHTML = h;
 
   setTimeout(() => {
-    ks.forEach((k,ki) => {
+    ks.forEach((k, ki) => {
       try {
-      const cv = document.getElementById('cd'+ki); if (!cv) return;
-      destroyChart('cd'+ki);
-      const dates = Object.keys(k.byDate).filter(d=>d.slice(0,7)===selMonth).sort();
-      const vals  = dates.map(d => k.byDate[d].liq);
-      chartInstances['cd'+ki] = new Chart(cv, {
-        type:'line',
-        data:{labels:dates.map(fmtDL),datasets:[{data:vals,borderColor:'#fff',backgroundColor:'rgba(255,255,255,.04)',tension:.35,fill:true,pointRadius:2,borderWidth:1.5}]},
-        options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{
-          x:{grid:{display:false},ticks:{color:'#666',font:{family:'DM Mono',size:9},maxTicksLimit:8}},
-          y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
-        }}
-      });
+        const cv = document.getElementById('cd'+ki); if (!cv) return;
+        destroyChart('cd'+ki);
+        const kc     = KC[ki % KC.length];
+        const kName  = k.name;
+        const selKey = `${ki}`;
+        const selSet = window._kqSel[selKey] || new Set();
+        const dates  = Object.keys(k.byDate).filter(d=>d.slice(0,7)===selMonth).sort();
+        const activeSel = activeSellers(kName);
+        const hasCfg    = activeSel.length > 0;
+
+        // Build data: sum of selected sellers
+        const vals = dates.map(d => {
+          let total = 0;
+          // Active sellers
+          Object.entries(k.sellers).forEach(([sn, s]) => {
+            const isActive = !hasCfg || activeSel.includes(sn);
+            if (isActive && selSet.has(sn)) {
+              total += s.byDate?.[d]?.liq || 0;
+            }
+            if (!isActive && selSet.has('__inact__')) {
+              total += s.byDate?.[d]?.liq || 0;
+            }
+          });
+          return total;
+        });
+
+        chartInstances['cd'+ki] = new Chart(cv, {
+          type:'line',
+          data:{labels:dates.map(fmtDL),datasets:[{
+            data:vals,borderColor:kc.line,
+            backgroundColor:kc.fill,
+            tension:.35,fill:true,pointRadius:2,borderWidth:1.5
+          }]},
+          options:{responsive:true,animation:false,maintainAspectRatio:false,
+            plugins:{legend:{display:false}},scales:{
+              x:{grid:{display:false},ticks:{color:'#666',font:{family:'DM Mono',size:9},maxTicksLimit:8}},
+              y:{grid:{color:'#1a1a1a'},ticks:{color:'#666',font:{family:'DM Mono',size:9},callback:v=>'R$'+v.toLocaleString('pt-BR',{notation:'compact'})}}
+            }
+          }
+        });
       } catch(e) { console.warn('kiosques chart:', e.message); }
     });
   }, 100);
   } catch(e) { console.error('renderKiosques ERROR:', e.message, e.stack?.split('\n')[1]); }
 }
+
+// Toggle seller selection in Quiosques tab
+function kqToggleSeller(ki, sName, _unused) {
+  if (!window._kqSel) window._kqSel = {};
+  const selKey = `${ki}`;
+  if (!window._kqSel[selKey]) window._kqSel[selKey] = new Set();
+  const selSet = window._kqSel[selKey];
+  if (selSet.has(sName)) {
+    if (selSet.size > 1) selSet.delete(sName);  // keep at least one selected
+  } else {
+    selSet.add(sName);
+  }
+  renderKiosques();
+}
+
 
 let goalsSelMonth = null;
 
