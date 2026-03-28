@@ -26,6 +26,7 @@
     <button class="tab admin-only" data-tab="estoque" id="tabEstoque" role="tab" aria-selected="false" onclick="nav('estoque',this)">Estoque</button>
     <button class="tab admin-only" data-tab="import" id="tabImport" role="tab" aria-selected="false" onclick="nav('import',this)">Importar</button>
     <button class="tab admin-only" data-tab="goals" id="tabGoals" role="tab" aria-selected="false" onclick="nav('goals',this)">Metas</button>
+    <button class="tab admin-only" data-tab="reposicao" id="tabReposicao" role="tab" aria-selected="false" onclick="nav('reposicao',this)">Reposição</button>
     <button class="tab admin-only" data-tab="produtos" id="tabProdutos" role="tab" aria-selected="false" onclick="nav('produtos',this)">Produtos</button>
   </nav>
   <div class="bar-r">
@@ -94,6 +95,12 @@
 <section class="pnl" id="pnl-goals" role="tabpanel">
   <div class="h1">Configurar Metas</div><div class="sub">Padrão por quiosque · desdobramento automático</div>
   <div id="goalsBody"><div class="empty"><div class="ei" aria-hidden="true">○</div><div class="et">Importe um relatório primeiro</div></div></div>
+</section>
+
+<section class="pnl" id="pnl-reposicao" role="tabpanel">
+  <div class="h1">Reposição</div>
+  <div class="sub">Mix ideal único e plano de reposição por quiosque</div>
+  <div id="reposicaoBody"><div class="empty"><div class="ei" aria-hidden="true">○</div><div class="et">Carregando…</div></div></div>
 </section>
 
 <section class="pnl" id="pnl-produtos" role="tabpanel">
@@ -199,6 +206,7 @@
 <script src="js/consolidado.js"></script>
 <script src="js/kiosques.js"></script>
 <script src="js/geral.js"></script>
+<script src="js/reposicao.js"></script>
 <script src="js/produtos.js"></script>
 </body>
 </html>

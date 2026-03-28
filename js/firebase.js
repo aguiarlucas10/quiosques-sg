@@ -66,8 +66,8 @@ const ROLES = {
 const ROLE_TABS = {
   vendedor:    ['geral','kiosques'],
   gerente:     ['geral','kiosques','consolidado','premiacoes'],
-  coordenador: ['geral','kiosques','consolidado','premiacoes','financeiro','estoque','goals','produtos','aprovacao'],
-  admin:       ['geral','kiosques','consolidado','premiacoes','financeiro','estoque','import','goals','produtos','aprovacao'],
+  coordenador: ['geral','kiosques','consolidado','premiacoes','financeiro','estoque','goals','reposicao','produtos','aprovacao'],
+  admin:       ['geral','kiosques','consolidado','premiacoes','financeiro','estoque','import','goals','reposicao','produtos','aprovacao'],
 };
 
 function canAccessTab(tab) {

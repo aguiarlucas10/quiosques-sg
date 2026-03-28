@@ -374,6 +374,7 @@ function nav(id, btn) {
   if (id==='estoque') renderEstoque();
   if (id==='aprovacao') renderAprovacao();
   if (id==='financeiro') renderFinanceiro();
+  if (id==='reposicao') window.renderReposicao?.();
   if (id==='produtos') window.renderProdutos?.();
 }
 
@@ -510,6 +511,7 @@ window.tryRender = function tryRender() {
     if (tab === 'consolidado') { renderConsolidado(); return; }
     if (tab === 'premiacoes') { renderPremiacoes(); return; }
     if (tab === 'financeiro') { renderFinanceiro(); return; }
+    if (tab === 'reposicao') { window.renderReposicao?.(); return; }
     if (tab === 'produtos') { window.renderProdutos?.(); return; }
     renderGeral();
   } catch(e) { console.error('tryRender error:', e); }
