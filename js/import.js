@@ -190,7 +190,7 @@ async function processAnalyticCSV() {
         existingSkus[item.sku] = {
           desc: item.desc, listPrice: item.listPrice, practPrice: item.price,
           totalSold:0, totalReturned:0, revenue:0,
-          byKiosk:{}, byDate:{}
+          byKiosk:{}
         };
       }
       const sk = existingSkus[item.sku];
@@ -204,7 +204,6 @@ async function processAnalyticCSV() {
         sk.revenue       += itemLiq;
         sk.byKiosk[kName].sold    += item.qty;
         sk.byKiosk[kName].revenue += itemLiq;
-        if (date) sk.byDate[date] = (sk.byDate[date]||0) + item.qty;
       } else if (item.op === 'Troca') {
         sk.totalReturned += item.qtyX;
         sk.byKiosk[kName].returned += item.qtyX;
