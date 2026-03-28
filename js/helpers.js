@@ -13,7 +13,7 @@ function escapeHtml(str) {
 // ── 2. Global State (P7 - organized namespace) ──────────
 window._store = { period:null, importedAt:null, gtLiq:0, gtPecas:0, kiosks:{}, sellers:{}, txnKeys:[], dateRange:[] };
 window._goals = { kiosks:{}, sellers:{} };
-window._analytics = { skus:{}, transactions:{} };
+window._analytics = { skus:{} };
 window._isAdmin = false;
 window._userRole = null;
 window._userProfile = null;

@@ -80,7 +80,8 @@ async function processAnalyticCSV() {
 
   // Analytics data (separate Firestore doc)
   const existingSkus  = JSON.parse(JSON.stringify(window._analytics?.skus||{}));
-  const existingTxnDetails = JSON.parse(JSON.stringify(window._analytics?.transactions||{}));
+  // Note: individual transactions are no longer stored in analytics to avoid
+  // Firestore index limit (40K entries). Only aggregated SKU data is kept.
 
   let newTxns = 0, dupTxns = 0;
 
@@ -177,12 +178,6 @@ async function processAnalyticCSV() {
       pa.total += txnLiq;      pa.n    += 1;
     }
 
-    // Store transaction detail for analytics
-    existingTxnDetails[txnId] = {
-      kiosk: kName, seller: sName, date, time: txn.time,
-      items: txn.items
-    };
-
     // Update SKU analytics — distribute txnLiq proportionally across sold items
     // so each SKU's revenue reflects the net amount actually received
     const saleItems = txn.items.filter(it => it.op === 'Venda' && it.qty > 0);
@@ -261,7 +256,6 @@ async function processAnalyticCSV() {
     };
     const newAnalytics = {
       skus: existingSkus,
-      transactions: existingTxnDetails,
       payments: window._payAgg || {},
       importedAt: newStore.importedAt,
       period, dateRange: newStore.dateRange

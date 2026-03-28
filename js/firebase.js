@@ -207,7 +207,7 @@ function startListeners() {
     window.tryRender?.();
   }, err => console.warn('goals:', err));
   _unsubAnalytics = onSnapshot(REF_ANALYTICS, snap => {
-    window._analytics = snap.exists() ? snap.data() : { skus:{}, transactions:{} };
+    window._analytics = snap.exists() ? snap.data() : { skus:{} };
     if (document.getElementById('pnl-estoque')?.classList.contains('on')) window.renderEstoque?.();
   }, err => console.warn('analytics:', err));
 }
