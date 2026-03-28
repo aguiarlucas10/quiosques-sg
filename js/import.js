@@ -183,7 +183,13 @@ async function processAnalyticCSV() {
       items: txn.items
     };
 
-    // Update SKU analytics
+    // Update SKU analytics — distribute txnLiq proportionally across sold items
+    // so each SKU's revenue reflects the net amount actually received
+    const saleItems = txn.items.filter(it => it.op === 'Venda' && it.qty > 0);
+    const grossTotal = saleItems.reduce((s, it) => s + (it.price * it.qty), 0);
+    // Ratio: how much of the gross price was actually received (after exchange credits, discounts)
+    const liqRatio = grossTotal > 0 ? txnLiq / grossTotal : 1;
+
     for (const item of txn.items) {
       if (!existingSkus[item.sku]) {
         existingSkus[item.sku] = {
@@ -198,10 +204,11 @@ async function processAnalyticCSV() {
       sk.practPrice = item.price;
       if (!sk.byKiosk[kName]) sk.byKiosk[kName] = {sold:0,returned:0,revenue:0};
       if (item.op === 'Venda') {
+        const itemLiq = item.price * item.qty * liqRatio;  // net revenue for this item
         sk.totalSold     += item.qty;
-        sk.revenue       += item.price * item.qty;
+        sk.revenue       += itemLiq;
         sk.byKiosk[kName].sold    += item.qty;
-        sk.byKiosk[kName].revenue += item.price * item.qty;
+        sk.byKiosk[kName].revenue += itemLiq;
         if (date) sk.byDate[date] = (sk.byDate[date]||0) + item.qty;
       } else if (item.op === 'Troca') {
         sk.totalReturned += item.qtyX;
