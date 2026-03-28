@@ -11,6 +11,70 @@ let repoMixLimits = {        // space constraints per kiosk
 };
 let repoExpandedKiosks = {};  // tracks which kiosk sections are expanded
 
+// ── Nuvemshop stock data (imported via CSV) ───────────────
+// Map: normalized product name → { sku, name, stock, price }
+let repoStockMap = {};
+let repoStockLoaded = false;
+
+function normalizeForMatch(str) {
+  return (str || '').toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove accents
+    .replace(/\s+/g, ' ');
+}
+
+function matchStockSku(pdvProductName) {
+  if (!repoStockLoaded) return null;
+  const norm = normalizeForMatch(pdvProductName);
+  // Exact match
+  if (repoStockMap[norm]) return repoStockMap[norm];
+  // Substring match (first 30 chars)
+  const prefix = norm.slice(0, 30);
+  for (const [key, val] of Object.entries(repoStockMap)) {
+    if (key.startsWith(prefix) || prefix.startsWith(key.slice(0, 30))) return val;
+  }
+  // Containment match
+  for (const [key, val] of Object.entries(repoStockMap)) {
+    if (key.includes(norm.slice(0, 25)) || norm.includes(key.slice(0, 25))) return val;
+  }
+  return null;
+}
+
+function loadStockCSV(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) { toast('Arquivo vazio', 'err'); return; }
+    // Semicolon-separated, col[2]=Name PT, col[30]=Stock, col[31]=SKU, col[23]=Price
+    repoStockMap = {};
+    let matched = 0, total = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(';').map(c => c.trim().replace(/^"|"$/g, ''));
+      const name = cols[2] || '';
+      const stock = parseInt(cols[30]) || 0;
+      const sku = (cols[31] || '').trim();
+      const price = parseFloat((cols[23] || '0').replace(',', '.')) || 0;
+      if (!name && !sku) continue;
+      total++;
+      const norm = normalizeForMatch(name);
+      if (norm) {
+        repoStockMap[norm] = { sku, name, stock, price };
+      }
+    }
+    repoStockLoaded = true;
+    // Count matches with analytics
+    const skus = window._analytics?.skus || {};
+    for (const [, data] of Object.entries(skus)) {
+      if (matchStockSku(data.desc)) matched++;
+    }
+    toast(total + ' produtos carregados, ' + matched + '/' + Object.keys(skus).length + ' matched', 'ok');
+    renderReposicao();
+  };
+  reader.readAsText(file, 'latin-1');
+}
+
 // ── Kiosk constants ────────────────────────────────────────
 const REPO_KIOSK_NAMES = [
   'QUIOSQUE BALNEARIO SHOPPING',
@@ -119,6 +183,9 @@ function computeUnifiedMix() {
                 + avgPrice * 0.001 * 0.2
                 + (numKiosksPresent / 4) * 0.2;
 
+    // Match to Nuvemshop stock
+    const stockMatch = matchStockSku(data.desc || '');
+
     scored.push({
       code,
       desc: data.desc || code,
@@ -130,7 +197,10 @@ function computeUnifiedMix() {
       totalSold: data.totalSold || 0,
       totalReturned: data.totalReturned || 0,
       numKiosks: numKiosksPresent,
-      byKiosk: data.byKiosk || {}
+      byKiosk: data.byKiosk || {},
+      nuvemSku: stockMatch?.sku || '',
+      nuvemStock: stockMatch?.stock ?? null,
+      nuvemName: stockMatch?.name || ''
     });
   }
 
@@ -212,7 +282,7 @@ function exportRepoCSV() {
   const kiosks = repoKioskNames();
   const nDays = repoNDays();
 
-  const rows = [['Quiosque', 'SKU', 'Produto', 'Categoria', 'Vel/dia', 'Qtd Repor', 'Tipo']];
+  const rows = [['Quiosque', 'SKU Nuvemshop', 'SKU PDV', 'Produto', 'Categoria', 'Vel/dia', 'Estoque Atual', 'Qtd Repor', 'Tipo']];
 
   for (const kName of kiosks) {
     const short = repoShort(kName);
@@ -222,10 +292,12 @@ function exportRepoCSV() {
       const tipo = repoType(item.code, kName);
       rows.push([
         short,
+        item.nuvemSku || '',
         item.code,
         item.desc,
         item.cat,
         vel.toFixed(3),
+        item.nuvemStock !== null ? item.nuvemStock : '',
         qty,
         tipo
       ]);
@@ -289,7 +361,11 @@ function renderReposicao() {
     + '<button class="btn-secondary" onclick="recalcRepo()" style="height:34px;padding:0 14px">Recalcular</button>'
     + '</div>';
 
-  h += '<div class="geral-filter-item" style="margin-left:auto">'
+  h += '<div class="geral-filter-item" style="margin-left:auto;display:flex;gap:8px;align-items:flex-end">'
+    + '<label class="btn-secondary" style="height:34px;padding:0 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:.8rem">'
+    + (repoStockLoaded ? '<span style="color:var(--success)">\u2713</span> Estoque carregado' : '\u2191 Importar Estoque CSV')
+    + '<input type="file" accept=".csv" style="display:none" onchange="loadStockCSV(event)">'
+    + '</label>'
     + '<button class="btn-secondary" onclick="exportRepoCSV()" style="height:34px;padding:0 14px">\u2913 Exportar CSV</button>'
     + '</div>';
 
@@ -366,6 +442,7 @@ function renderMixGroup(groupLabel, items, limit, kiosks) {
   h += '<div class="tw-scroll"><table class="tw">';
   h += '<thead><tr>'
     + '<th style="width:32px">#</th>'
+    + '<th>SKU</th>'
     + '<th>Produto</th>'
     + '<th>Categoria</th>'
     + '<th class="num">Score</th>'
@@ -375,13 +452,15 @@ function renderMixGroup(groupLabel, items, limit, kiosks) {
     h += '<th class="num">' + repoShort(k) + '</th>';
   });
 
-  h += '<th class="num">Vendas</th>'
-    + '<th style="width:48px;text-align:center">Mix</th>'
+  h += '<th class="num">Vendas</th>';
+  if (repoStockLoaded) h += '<th class="num">Estoque</th>';
+  h += '<th style="width:48px;text-align:center">Mix</th>'
     + '</tr></thead><tbody>';
 
   items.forEach((item, idx) => {
     h += '<tr>';
     h += '<td class="mo" style="color:var(--muted)">' + (idx + 1) + '</td>';
+    h += '<td class="mo" style="font-size:.75rem;white-space:nowrap">' + escapeHtml(item.nuvemSku || item.code) + '</td>';
     h += '<td>' + escapeHtml(item.desc) + '</td>';
     h += '<td style="font-size:.78rem">' + escapeHtml(item.cat) + '</td>';
     h += '<td class="num mo">' + item.score.toFixed(3) + '</td>';
@@ -394,6 +473,11 @@ function renderMixGroup(groupLabel, items, limit, kiosks) {
     });
 
     h += '<td class="num mo">' + (item.totalSold || 0) + '</td>';
+    if (repoStockLoaded) {
+      const stk = item.nuvemStock;
+      const stkColor = stk === null ? 'var(--muted)' : stk === 0 ? 'var(--danger)' : stk < 10 ? '#f59e0b' : 'var(--success)';
+      h += '<td class="num mo" style="color:' + stkColor + '">' + (stk !== null ? stk : '—') + '</td>';
+    }
     h += '<td style="text-align:center;color:var(--success)">&#10003;</td>';
     h += '</tr>';
   });
@@ -443,6 +527,7 @@ function renderKioskRepoTable(kioskName, mixItems, kioskIdx) {
   let h = '<div class="tw-scroll" style="margin-top:8px"><table class="tw">';
   h += '<thead><tr>'
     + '<th style="width:32px">#</th>'
+    + '<th>SKU</th>'
     + '<th>Produto</th>'
     + '<th>Categoria</th>'
     + '<th class="num">Vel Real</th>'
@@ -474,6 +559,7 @@ function renderKioskRepoTable(kioskName, mixItems, kioskIdx) {
 
       h += '<tr>';
       h += '<td class="mo" style="color:var(--muted)">' + count + '</td>';
+      h += '<td class="mo" style="font-size:.75rem;white-space:nowrap">' + escapeHtml(r.item.nuvemSku || r.item.code) + '</td>';
       h += '<td>' + escapeHtml(r.item.desc) + '</td>';
       h += '<td style="font-size:.78rem">' + escapeHtml(r.item.cat) + '</td>';
       h += '<td class="num mo">' + r.vel.toFixed(3) + '</td>';
@@ -569,3 +655,4 @@ window.setRepoInterval = setRepoInterval;
 window.setRepoLimit    = setRepoLimit;
 window.exportRepoCSV   = exportRepoCSV;
 window.toggleRepoKiosk = toggleRepoKiosk;
+window.loadStockCSV    = loadStockCSV;
