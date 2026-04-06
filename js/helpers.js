@@ -40,6 +40,9 @@ function sanitizeGoals(g) {
     weeklyOverride: cleanObj(G.weeklyOverride||{}),
     activeSellers:  Array.isArray(G.activeSellers) ? G.activeSellers.filter(s=>typeof s==='string'&&!isCorrupt(s)) : [],
     dailyByDate:    cleanObj(G.dailyByDate||{}),
+    ticketMedioGoal: cleanNum(G.ticketMedioGoal),
+    paGoal:          cleanNum(G.paGoal),
+    gerente:         typeof G.gerente === 'string' ? G.gerente : '',
   });
   const cleanSeller = S => !S ? {} : ({
     overrideMonthly: cleanObj(S.overrideMonthly||{}),
@@ -127,24 +130,78 @@ const CLRS = [
   'rgba(255,255,255,.25)',
 ];
 
+// ── Prize tiers per document "PREMIAÇÕES QUIOSQUES SG" ──
+
+// Semanal Flash — vendedor (meta da semana do quiosque individual)
 const PRIZE_TIERS = [
-  { pct:160, label:'Ultra', cls:'ultra', prize:200 },
-  { pct:140, label:'Mega',  cls:'mega',  prize:150 },
-  { pct:120, label:'Super', cls:'super', prize:100 },
-  { pct:100, label:'Meta',  cls:'hit',   prize:50  },
+  { pct:160, label:'160%', cls:'ultra', prize:200 },
+  { pct:140, label:'140%', cls:'mega',  prize:150 },
+  { pct:120, label:'120%', cls:'super', prize:100 },
+  { pct:100, label:'Meta', cls:'hit',   prize:50  },
 ];
-const PRIZE_TIERS_MONTHLY = [
-  { pct:160, label:'Ultra', cls:'ultra', prize:800 },
-  { pct:140, label:'Mega',  cls:'mega',  prize:600 },
-  { pct:120, label:'Super', cls:'super', prize:400 },
-  { pct:100, label:'Meta',  cls:'hit',   prize:200 },
+
+// Equipe mensal — meta geral quiosque, NÃO cumulativa
+const PRIZE_EQUIPE = [
+  { pct:160, label:'160%', cls:'ultra', prize:500 },
+  { pct:140, label:'140%', cls:'mega',  prize:400 },
+  { pct:120, label:'120%', cls:'super', prize:300 },
+  { pct:100, label:'100%', cls:'hit',   prize:200 },
+  { pct:80,  label:'80%',  cls:'warn',  prize:100 },
 ];
+
+// Individual mensal — Faturamento (meta individual vendedor), cumulativa com equipe
+const PRIZE_INDIVIDUAL_FAT = [
+  { pct:160, label:'160%', cls:'ultra', prize:900 },
+  { pct:140, label:'140%', cls:'mega',  prize:800 },
+  { pct:120, label:'120%', cls:'super', prize:700 },
+  { pct:100, label:'100%', cls:'hit',   prize:500 },
+  { pct:80,  label:'80%',  cls:'warn',  prize:400 },
+];
+
+// Individual mensal — Ticket Médio (sim/não: atingiu meta TM → valor segue nível de fat.)
+const PRIZE_INDIVIDUAL_TM = [
+  { pct:160, prize:150 },
+  { pct:140, prize:125 },
+  { pct:120, prize:100 },
+  { pct:100, prize:75  },
+  { pct:80,  prize:50  },
+];
+
+// Individual mensal — P.A. (sim/não: atingiu meta PA → valor segue nível de fat.)
+const PRIZE_INDIVIDUAL_PA = [
+  { pct:160, prize:150 },
+  { pct:140, prize:125 },
+  { pct:120, prize:100 },
+  { pct:100, prize:75  },
+  { pct:80,  prize:50  },
+];
+
+// Gerente mensal — meta geral quiosque
+const PRIZE_GERENTE_FAT = [
+  { pct:160, label:'160%', cls:'ultra', prize:1400 },
+  { pct:140, label:'140%', cls:'mega',  prize:1200 },
+  { pct:120, label:'120%', cls:'super', prize:1000 },
+  { pct:100, label:'100%', cls:'hit',   prize:800  },
+  { pct:80,  label:'80%',  cls:'warn',  prize:600  },
+];
+
+// Gerente — TM e PA (mesmos valores, baseado na meta do quiosque)
+const PRIZE_GERENTE_TM = PRIZE_INDIVIDUAL_TM;
+const PRIZE_GERENTE_PA = PRIZE_INDIVIDUAL_PA;
+
+// Legacy alias for backward compatibility (used in geral.js, kiosques.js, consolidado.js)
+const PRIZE_TIERS_MONTHLY = PRIZE_INDIVIDUAL_FAT;
+
 function prizeForPct(pct, tiers) {
   tiers = tiers || PRIZE_TIERS;
   for (const t of tiers) { if (pct >= t.pct) return t; }
   return null;
 }
-function prizeForPctMonthly(pct) { return prizeForPct(pct, PRIZE_TIERS_MONTHLY); }
+function prizeForPctMonthly(pct) { return prizeForPct(pct, PRIZE_INDIVIDUAL_FAT); }
+
+// Helper: get kiosk goals for TM and PA
+function kioskTmGoal(kName) { return goals.kiosks?.[kName]?.ticketMedioGoal || 0; }
+function kioskPaGoal(kName) { return goals.kiosks?.[kName]?.paGoal || 0; }
 
 // ── 7. Date/format utilities ────────────────────────────
 function availableMonths() {
@@ -247,6 +304,42 @@ function sellerMonthDias(kName, sName, monthKey) {
   const byDate = store.kiosks[kName]?.sellers?.[sName]?.byDate || {};
   return Object.keys(byDate)
     .filter(d => (!monthKey || d.slice(0,7) === monthKey) && (byDate[d].liq||0) > 0).length;
+}
+// Seller monthly transactions (atendimentos / Docs únicos)
+function sellerMonthTxns(kName, sName, monthKey) {
+  const byDate = store.kiosks[kName]?.sellers?.[sName]?.byDate || {};
+  return Object.entries(byDate)
+    .filter(([d]) => !monthKey || d.slice(0,7) === monthKey)
+    .reduce((s,[,v]) => s+(v.txns||0), 0);
+}
+// Seller Ticket Médio = Faturamento líquido / nº de atendimentos
+function sellerMonthTM(kName, sName, monthKey) {
+  const liq = sellerMonthLiq(kName, sName, monthKey);
+  const txns = sellerMonthTxns(kName, sName, monthKey);
+  return txns > 0 ? liq / txns : 0;
+}
+// Seller P.A. = Peças vendidas / nº de atendimentos
+function sellerMonthPA(kName, sName, monthKey) {
+  const pecas = sellerMonthPecas(kName, sName, monthKey);
+  const txns = sellerMonthTxns(kName, sName, monthKey);
+  return txns > 0 ? pecas / txns : 0;
+}
+// Kiosk-level TM e PA (para gerente — média geral do quiosque)
+function kioskMonthTxns(kName, monthKey) {
+  const byDate = store.kiosks[kName]?.byDate || {};
+  return Object.entries(byDate)
+    .filter(([d]) => !monthKey || d.slice(0,7) === monthKey)
+    .reduce((s,[,v]) => s+(v.txns||0), 0);
+}
+function kioskMonthTM(kName, monthKey) {
+  const liq = kioskMonthLiq(kName, monthKey);
+  const txns = kioskMonthTxns(kName, monthKey);
+  return txns > 0 ? liq / txns : 0;
+}
+function kioskMonthPA(kName, monthKey) {
+  const pecas = kioskMonthPecas(kName, monthKey);
+  const txns = kioskMonthTxns(kName, monthKey);
+  return txns > 0 ? pecas / txns : 0;
 }
 function kioskLastSale(kName) {
   const dates = Object.keys((store.kiosks[kName]||{}).byDate||{}).sort();

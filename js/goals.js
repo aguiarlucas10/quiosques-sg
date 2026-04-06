@@ -20,6 +20,7 @@ function _si(sn){ let i=_reg.sellers.indexOf(sn); if(i<0){i=_reg.sellers.length;
 function _kn(i){ return _reg.kiosks[i]; }
 function _sn(i){ return _reg.sellers[i]; }
 function _setKioskField(ki,field,mk,val){ setKioskField(_kn(ki),field,mk,val); }
+function _setKioskExtra(ki,field,val){ const kn=_kn(ki); ensureKiosk(kn); if(field==='paGoal'||field==='ticketMedioGoal') goals.kiosks[kn][field]=parseFloat(val)||0; else goals.kiosks[kn][field]=val; }
 function _setKioskWeek(ki,monKey,val){ setKioskWeek(_kn(ki),monKey,val); }
 function _toggleSeller(ki,si){ toggleSeller(_kn(ki),_sn(si)); }
 function _setSellerOverride(si,field,key,val){ setSellerOverride(_sn(si),field,key,val); }
@@ -102,7 +103,33 @@ function renderGoals() {
           </div>
           <div class="gk-hint" id="calc-k${ki}">${mInd?'→ '+R(mInd)+' por vendedor':''}</div>
         </div>
-
+        <div class="gk-std-item">
+          <span class="gk-lbl">Meta Ticket Médio (R$)</span>
+          <div class="gk-inp-row">
+            <input class="gk-inp" type="number" min="0" step="10"
+              value="${G.ticketMedioGoal||''}" placeholder="0"
+              oninput="_setKioskExtra(${ki},'ticketMedioGoal',this.value)">
+          </div>
+        </div>
+      </div>
+      <div class="gk-std">
+        <div class="gk-std-item">
+          <span class="gk-lbl">Meta P.A. (produtos/atend.)</span>
+          <div class="gk-inp-row">
+            <input class="gk-inp" type="number" min="0" step="0.1"
+              value="${G.paGoal||''}" placeholder="0"
+              oninput="_setKioskExtra(${ki},'paGoal',this.value)">
+          </div>
+        </div>
+        <div class="gk-std-item">
+          <span class="gk-lbl">Gerente da Loja</span>
+          <div class="gk-inp-row">
+            <select class="gk-inp" style="text-align:left" onchange="_setKioskExtra(${ki},'gerente',this.value)">
+              <option value="">— nenhum —</option>
+              ${allS.map(s => `<option value="${s.name}"${G.gerente===s.name?' selected':''}>${s.name}</option>`).join('')}
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="gk-sellers-lbl">Vendedores — ativo / inativo</div>
@@ -262,12 +289,15 @@ function renderGoals() {
 
 // ── Goals setters ─────────────────────────────────────────
 function ensureKiosk(kn) {
-  if (!goals.kiosks[kn]) goals.kiosks[kn] = { monthlyByMonth:{}, weeklyOverride:{}, activeSellers:[], dailyByDate:{} };
+  if (!goals.kiosks[kn]) goals.kiosks[kn] = { monthlyByMonth:{}, weeklyOverride:{}, activeSellers:[], dailyByDate:{}, ticketMedioGoal:0, paGoal:0, gerente:'' };
   const G = goals.kiosks[kn];
-  if (!G.monthlyByMonth) G.monthlyByMonth = {};
-  if (!G.dailyByDate) G.dailyByDate = {};
-  if (!G.weeklyOverride)              G.weeklyOverride  = {};
-  if (!G.activeSellers)               G.activeSellers   = [];
+  if (!G.monthlyByMonth)  G.monthlyByMonth = {};
+  if (!G.dailyByDate)     G.dailyByDate = {};
+  if (!G.weeklyOverride)  G.weeklyOverride = {};
+  if (!G.activeSellers)   G.activeSellers = [];
+  if (G.ticketMedioGoal === undefined) G.ticketMedioGoal = 0;
+  if (G.paGoal === undefined)          G.paGoal = 0;
+  if (G.gerente === undefined)         G.gerente = '';
 }
 function ensureSeller(sn) {
   if (!goals.sellers[sn]) goals.sellers[sn] = { overrideMonthly:{}, overrideWeekly:{} };

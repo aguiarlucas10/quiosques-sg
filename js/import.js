@@ -149,13 +149,15 @@ async function processAnalyticCSV() {
     const K = kiosks[kName];
     if (!K.sellers[sName]) K.sellers[sName] = {name:sName,trocas:0,byDate:{}};
     if (date) {
-      if (!K.byDate[date]) K.byDate[date] = {liq:0,pecas:0};
+      if (!K.byDate[date]) K.byDate[date] = {liq:0,pecas:0,txns:0};
       K.byDate[date].liq   += txnLiq;
       K.byDate[date].pecas += txnPcs;
+      K.byDate[date].txns  += 1;
       const S = K.sellers[sName];
-      if (!S.byDate[date]) S.byDate[date] = {liq:0,pecas:0};
+      if (!S.byDate[date]) S.byDate[date] = {liq:0,pecas:0,txns:0};
       S.byDate[date].liq   += txnLiq;
       S.byDate[date].pecas += txnPcs;
+      S.byDate[date].txns  += 1;
       S.trocas += txnTroca;
     }
 
