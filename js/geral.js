@@ -195,6 +195,7 @@ function renderGeral() {
         <span>Vendedor</span>
         <span class="num">Mês</span>
         ${wctxSel?'<span class="num gc-col-week">Sem.</span>':''}
+        <span class="num">Meta</span>
         <span class="num">Pçs</span>
         <span>Atingimento</span>
       </div>`;
@@ -217,6 +218,7 @@ function renderGeral() {
         <span class="gc-seller-name">${si===0?'<span class="star">★</span>':''}${s.name}</span>
         <span class="gc-seller-liq mo num">${R(sLiqMonth)}</span>
         ${wctxSel?`<span class="gc-seller-liq mo num gc-col-week">${R(sLiq)}</span>`:''}
+        <span class="gc-seller-meta mo num">${sGoal ? R(sGoal) : '—'}</span>
         <span class="gc-seller-pcs num">${pcs}</span>
         <span class="gc-seller-goal">
           ${sGoal
@@ -259,6 +261,7 @@ function renderGeral() {
           h += `<div class="gc-seller-row" style="font-size:.82rem">
             <span class="gc-seller-name">${s.name}</span>
             <span class="gc-seller-liq mo num">${R(swL)}</span>
+            <span class="gc-seller-meta mo num">${sgw ? R(sgw) : '—'}</span>
             <span class="gc-seller-pcs num">${swP}</span>
             <span class="gc-seller-goal">
               ${sgw

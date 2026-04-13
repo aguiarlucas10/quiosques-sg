@@ -6,6 +6,7 @@
 //  kioskMonthLiq, kioskMonthPecas, kioskMonthGoal, kioskWeekGoal,
 //  kWeekLiq, sellerMonthLiq, sellerMonthGoal, sellerWeekGoal,
 //  sellerMonthPecas, sWeekLiq, sWeekPcs, prizeForPct, prizeForPctMonthly,
+//  sellerMonthTM, sellerMonthPA, kioskTmGoal, kioskPaGoal,
 //  destroyChart, chartInstances, fmtDL, buildPeriodToolbar
 // ══════════════════════════════════════════════════════════
 
@@ -176,6 +177,40 @@ function renderKiosques() {
           ${mPrize?`<span class="gbadge ${mPrize.label.toLowerCase()}" style="margin-top:3px">${mPrize.label}</span>`:''}
         </div>`;
       }
+
+      // ── TM / PA metrics (always monthly) ──────────────
+      const tmReal = sellerMonthTM(kName, s.name, selMonth);
+      const tmGoal = kioskTmGoal(kName);
+      const tmHit  = tmGoal > 0 && tmReal >= tmGoal;
+      const paReal = sellerMonthPA(kName, s.name, selMonth);
+      const paGoal = kioskPaGoal(kName);
+      const paHit  = paGoal > 0 && paReal >= paGoal;
+
+      if (tmGoal > 0 || paGoal > 0) {
+        h += `<div class="ks-sc-metrics">
+          <div class="ks-sc-metric-row">
+            <span class="ks-sc-metric-lbl">Fat.</span>
+            <span class="ks-sc-metric-val mo">${R(displayLiq)}</span>
+            <span class="ks-sc-metric-meta"><span class="mo">${displayGoal ? R(displayGoal) : '—'}</span>
+              <span style="font-family:var(--mono);color:${displayGoal ? gColor(displayPct) : 'var(--muted)'}">${displayGoal ? floorPct(displayPct)+'%' : ''}</span></span>
+          </div>
+          <div class="ks-sc-metric-row">
+            <span class="ks-sc-metric-lbl">TM</span>
+            <span class="ks-sc-metric-val mo">${tmReal > 0 ? R(tmReal) : '—'}</span>
+            <span class="ks-sc-metric-meta">${tmGoal > 0
+              ? `<span class="mo">${R(tmGoal)}</span> ${tmHit ? '<span class="gbadge hit" style="font-size:.6rem;padding:1px 5px">✓</span>' : '<span class="gbadge miss" style="font-size:.6rem;padding:1px 5px">✗</span>'}`
+              : '—'}</span>
+          </div>
+          <div class="ks-sc-metric-row">
+            <span class="ks-sc-metric-lbl">PA</span>
+            <span class="ks-sc-metric-val">${paReal > 0 ? paReal.toFixed(2) : '—'}</span>
+            <span class="ks-sc-metric-meta">${paGoal > 0
+              ? `${paGoal.toFixed(2)} ${paHit ? '<span class="gbadge hit" style="font-size:.6rem;padding:1px 5px">✓</span>' : '<span class="gbadge miss" style="font-size:.6rem;padding:1px 5px">✗</span>'}`
+              : '—'}</span>
+          </div>
+        </div>`;
+      }
+
       h += `</div>`;
     });
 
