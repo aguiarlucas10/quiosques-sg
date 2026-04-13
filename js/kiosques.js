@@ -178,39 +178,6 @@ function renderKiosques() {
         </div>`;
       }
 
-      // ── TM / PA metrics (always monthly) ──────────────
-      const tmReal = sellerMonthTM(kName, s.name, selMonth);
-      const tmGoal = kioskTmGoal(kName);
-      const tmHit  = tmGoal > 0 && tmReal >= tmGoal;
-      const paReal = sellerMonthPA(kName, s.name, selMonth);
-      const paGoal = kioskPaGoal(kName);
-      const paHit  = paGoal > 0 && paReal >= paGoal;
-
-      if (tmGoal > 0 || paGoal > 0) {
-        h += `<div class="ks-sc-metrics">
-          <div class="ks-sc-metric-row">
-            <span class="ks-sc-metric-lbl">Fat.</span>
-            <span class="ks-sc-metric-val mo">${R(displayLiq)}</span>
-            <span class="ks-sc-metric-meta"><span class="mo">${displayGoal ? R(displayGoal) : '—'}</span>
-              <span style="font-family:var(--mono);color:${displayGoal ? gColor(displayPct) : 'var(--muted)'}">${displayGoal ? floorPct(displayPct)+'%' : ''}</span></span>
-          </div>
-          <div class="ks-sc-metric-row">
-            <span class="ks-sc-metric-lbl">TM</span>
-            <span class="ks-sc-metric-val mo">${tmReal > 0 ? R(tmReal) : '—'}</span>
-            <span class="ks-sc-metric-meta">${tmGoal > 0
-              ? `<span class="mo">${R(tmGoal)}</span> ${tmHit ? '<span class="gbadge hit" style="font-size:.6rem;padding:1px 5px">✓</span>' : '<span class="gbadge miss" style="font-size:.6rem;padding:1px 5px">✗</span>'}`
-              : '—'}</span>
-          </div>
-          <div class="ks-sc-metric-row">
-            <span class="ks-sc-metric-lbl">PA</span>
-            <span class="ks-sc-metric-val">${paReal > 0 ? paReal.toFixed(2) : '—'}</span>
-            <span class="ks-sc-metric-meta">${paGoal > 0
-              ? `${paGoal.toFixed(2)} ${paHit ? '<span class="gbadge hit" style="font-size:.6rem;padding:1px 5px">✓</span>' : '<span class="gbadge miss" style="font-size:.6rem;padding:1px 5px">✗</span>'}`
-              : '—'}</span>
-          </div>
-        </div>`;
-      }
-
       h += `</div>`;
     });
 
@@ -227,6 +194,100 @@ function renderKiosques() {
     }
 
     h += `</div>`;  // ks-sellers
+
+    // ── Weekly breakdown table: Vendedor | Sem1 | Sem2 | ... ──
+    if (allWeeks.length) {
+      const tmGoal = kioskTmGoal(kName);
+      const paGoal = kioskPaGoal(kName);
+
+      h += `<div class="ks-week-table-wrap">
+        <div class="ks-week-table-lbl">Metas e Resultados Semanais</div>
+        <div class="tw tw-scroll"><table class="ks-week-tbl"><thead><tr>
+          <th>Vendedor</th>`;
+      allWeeks.forEach((w, wi) => {
+        h += `<th colspan="3" class="num" style="text-align:center">Sem ${wi+1}<br><span style="font-weight:400;font-size:.6rem;color:var(--muted)">${w.label}</span></th>`;
+      });
+      h += `<th colspan="3" class="num" style="text-align:center">Mês</th>`;
+      h += `</tr><tr><th></th>`;
+      allWeeks.forEach(() => {
+        h += `<th class="num" style="font-size:.6rem;color:var(--muted)">Meta</th>
+              <th class="num" style="font-size:.6rem;color:var(--muted)">Real</th>
+              <th class="num" style="font-size:.6rem;color:var(--muted)">%</th>`;
+      });
+      h += `<th class="num" style="font-size:.6rem;color:var(--muted)">Meta</th>
+            <th class="num" style="font-size:.6rem;color:var(--muted)">Real</th>
+            <th class="num" style="font-size:.6rem;color:var(--muted)">%</th>`;
+      h += `</tr></thead><tbody>`;
+
+      sls.forEach(s => {
+        h += `<tr><td><strong>${s.name}</strong></td>`;
+        allWeeks.forEach(w => {
+          const swGoal = sellerWeekGoal(kName, w.monKey);
+          const swLiq  = sWeekLiq(kName, s.name, w.monday, w.sunday);
+          const swPct  = swGoal > 0 ? (swLiq / swGoal) * 100 : 0;
+          h += `<td class="mo num">${swGoal ? R(swGoal) : '—'}</td>
+                <td class="mo num">${swLiq > 0 ? R(swLiq) : '—'}</td>
+                <td class="num" style="color:${swGoal ? gColor(swPct) : 'var(--muted)'}"><strong>${swGoal ? floorPct(swPct)+'%' : '—'}</strong></td>`;
+        });
+        // Month totals
+        const smGoal = sellerMonthGoal(kName, selMonth);
+        const smLiq  = sellerMonthLiq(kName, s.name, selMonth);
+        const smPct  = smGoal > 0 ? (smLiq / smGoal) * 100 : 0;
+        h += `<td class="mo num" style="border-left:2px solid var(--border)">${smGoal ? R(smGoal) : '—'}</td>
+              <td class="mo num">${smLiq > 0 ? R(smLiq) : '—'}</td>
+              <td class="num" style="color:${smGoal ? gColor(smPct) : 'var(--muted)'}"><strong>${smGoal ? floorPct(smPct)+'%' : '—'}</strong></td>`;
+        h += `</tr>`;
+
+        // TM / PA sub-rows
+        if (tmGoal > 0 || paGoal > 0) {
+          // TM row
+          if (tmGoal > 0) {
+            h += `<tr class="ks-metric-subrow"><td style="padding-left:16px;color:var(--muted);font-size:.72rem">↳ TM</td>`;
+            allWeeks.forEach(w => {
+              const swTxns = Object.entries(store.kiosks[kName]?.sellers?.[s.name]?.byDate || {})
+                .filter(([d]) => { const dt=new Date(d+'T00:00:00'); return dt>=w.monday&&dt<=w.sunday; })
+                .reduce((sum,[,v]) => sum+(v.txns||0), 0);
+              const swLiqW = sWeekLiq(kName, s.name, w.monday, w.sunday);
+              const swTM   = swTxns > 0 ? swLiqW / swTxns : 0;
+              const tmHit  = swTM >= tmGoal;
+              h += `<td class="mo num" style="font-size:.72rem;color:var(--muted)">${R(tmGoal)}</td>
+                    <td class="mo num" style="font-size:.72rem">${swTM > 0 ? R(swTM) : '—'}</td>
+                    <td style="text-align:center">${swTM > 0 ? (tmHit ? '<span class="gbadge hit" style="font-size:.55rem;padding:1px 4px">✓</span>' : '<span class="gbadge miss" style="font-size:.55rem;padding:1px 4px">✗</span>') : '<span style="color:var(--muted)">—</span>'}</td>`;
+            });
+            // Month TM
+            const mTM = sellerMonthTM(kName, s.name, selMonth);
+            const mTMHit = mTM >= tmGoal;
+            h += `<td class="mo num" style="font-size:.72rem;color:var(--muted);border-left:2px solid var(--border)">${R(tmGoal)}</td>
+                  <td class="mo num" style="font-size:.72rem">${mTM > 0 ? R(mTM) : '—'}</td>
+                  <td style="text-align:center">${mTM > 0 ? (mTMHit ? '<span class="gbadge hit" style="font-size:.55rem;padding:1px 4px">✓</span>' : '<span class="gbadge miss" style="font-size:.55rem;padding:1px 4px">✗</span>') : '<span style="color:var(--muted)">—</span>'}</td>`;
+            h += `</tr>`;
+          }
+          // PA row
+          if (paGoal > 0) {
+            h += `<tr class="ks-metric-subrow"><td style="padding-left:16px;color:var(--muted);font-size:.72rem">↳ PA</td>`;
+            allWeeks.forEach(w => {
+              const swTxns = Object.entries(store.kiosks[kName]?.sellers?.[s.name]?.byDate || {})
+                .filter(([d]) => { const dt=new Date(d+'T00:00:00'); return dt>=w.monday&&dt<=w.sunday; })
+                .reduce((sum,[,v]) => sum+(v.txns||0), 0);
+              const swPcsW = sWeekPcs(kName, s.name, w.monday, w.sunday);
+              const swPA   = swTxns > 0 ? swPcsW / swTxns : 0;
+              const paHit  = swPA >= paGoal;
+              h += `<td class="num" style="font-size:.72rem;color:var(--muted)">${paGoal.toFixed(2)}</td>
+                    <td class="num" style="font-size:.72rem">${swPA > 0 ? swPA.toFixed(2) : '—'}</td>
+                    <td style="text-align:center">${swPA > 0 ? (paHit ? '<span class="gbadge hit" style="font-size:.55rem;padding:1px 4px">✓</span>' : '<span class="gbadge miss" style="font-size:.55rem;padding:1px 4px">✗</span>') : '<span style="color:var(--muted)">—</span>'}</td>`;
+            });
+            // Month PA
+            const mPA = sellerMonthPA(kName, s.name, selMonth);
+            const mPAHit = mPA >= paGoal;
+            h += `<td class="num" style="font-size:.72rem;color:var(--muted);border-left:2px solid var(--border)">${paGoal.toFixed(2)}</td>
+                  <td class="num" style="font-size:.72rem">${mPA > 0 ? mPA.toFixed(2) : '—'}</td>
+                  <td style="text-align:center">${mPA > 0 ? (mPAHit ? '<span class="gbadge hit" style="font-size:.55rem;padding:1px 4px">✓</span>' : '<span class="gbadge miss" style="font-size:.55rem;padding:1px 4px">✗</span>') : '<span style="color:var(--muted)">—</span>'}</td>`;
+            h += `</tr>`;
+          }
+        }
+      });
+      h += `</tbody></table></div></div>`;
+    }
 
     // ── Daily chart (clickable sellers filter) ───────
     h += `<div class="ks-chart">

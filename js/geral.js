@@ -195,9 +195,8 @@ function renderGeral() {
         <span>Vendedor</span>
         <span class="num">Mês</span>
         ${wctxSel?'<span class="num gc-col-week">Sem.</span>':''}
-        <span class="num">Meta</span>
         <span class="num">Pçs</span>
-        <span>Atingimento</span>
+        <span>Meta / Atingimento</span>
       </div>`;
 
     sls.forEach((s, si) => {
@@ -218,11 +217,11 @@ function renderGeral() {
         <span class="gc-seller-name">${si===0?'<span class="star">★</span>':''}${s.name}</span>
         <span class="gc-seller-liq mo num">${R(sLiqMonth)}</span>
         ${wctxSel?`<span class="gc-seller-liq mo num gc-col-week">${R(sLiq)}</span>`:''}
-        <span class="gc-seller-meta mo num">${sGoal ? R(sGoal) : '—'}</span>
         <span class="gc-seller-pcs num">${pcs}</span>
         <span class="gc-seller-goal">
           ${sGoal
-            ? `<span class="gc-goal-pct" style="color:${gColor(sPct)}">${floorPct(sPct)}%</span>
+            ? `<span class="gc-goal-meta mo" style="font-size:.68rem;color:var(--muted)">Meta ${R(sGoal)}</span>
+               <span class="gc-goal-pct" style="color:${gColor(sPct)}">${floorPct(sPct)}%</span>
                <div class="gc-mini-bar"><div class="gc-mini-fill" style="width:${Math.min(sPct,100)}%;background:${gColor(sPct)}"></div></div>`
             : '<span class="no-goal">—</span>'}
         </span>
@@ -261,11 +260,11 @@ function renderGeral() {
           h += `<div class="gc-seller-row" style="font-size:.82rem">
             <span class="gc-seller-name">${s.name}</span>
             <span class="gc-seller-liq mo num">${R(swL)}</span>
-            <span class="gc-seller-meta mo num">${sgw ? R(sgw) : '—'}</span>
             <span class="gc-seller-pcs num">${swP}</span>
             <span class="gc-seller-goal">
               ${sgw
-                ? `<span class="gc-goal-pct" style="color:${gColor(spW)}">${floorPct(spW)}%</span>`
+                ? `<span class="gc-goal-meta mo" style="font-size:.62rem;color:var(--muted)">${R(sgw)}</span>
+                   <span class="gc-goal-pct" style="color:${gColor(spW)}">${floorPct(spW)}%</span>`
                 : '<span class="no-goal">—</span>'}
             </span>
           </div>`;

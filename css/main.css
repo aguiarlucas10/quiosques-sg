@@ -157,18 +157,18 @@ tr.inactive td{opacity:.35}
 /* Seller table */
 .gc-sellers{border-top:1px solid var(--border)}
 .gc-col-week{color:rgba(255,255,255,.7)}
-.gc-sellers-week .gc-seller-row{grid-template-columns:1fr auto auto auto auto 140px}
-.gc-sellers-headweek{grid-template-columns:1fr auto auto auto auto 140px!important}
+.gc-sellers-week .gc-seller-row{grid-template-columns:1fr auto auto auto 140px}
+.gc-sellers-headweek{grid-template-columns:1fr auto auto auto 140px!important}
 .ks-sc-dimmed{opacity:.35;filter:grayscale(.5);transition:opacity .15s}
 .ks-sc-dimmed:hover{opacity:.7}
 .gc-sellers-head{
-  display:grid;grid-template-columns:1fr auto auto auto 140px;gap:8px;
+  display:grid;grid-template-columns:1fr auto auto 140px;gap:8px;
   padding:8px 18px;
   font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
   background:var(--surface2);
 }
 .gc-seller-row{
-  display:grid;grid-template-columns:1fr auto auto auto 140px;gap:8px;
+  display:grid;grid-template-columns:1fr auto auto 140px;gap:8px;
   align-items:center;padding:9px 18px;
   border-top:1px solid rgba(42,42,42,.5);
   transition:background .12s;
@@ -279,11 +279,13 @@ tr.inactive td{opacity:.35}
 .ks-sc-liq{font-family:var(--mono);font-size:.95rem;color:var(--text);margin-bottom:6px}
 .ks-sc-goal{margin-top:6px}
 .ks-sc-goal-row{display:flex;justify-content:space-between;margin-bottom:3px}
-.ks-sc-metrics{margin-top:8px;border-top:1px solid rgba(42,42,42,.4);padding-top:6px}
-.ks-sc-metric-row{display:flex;justify-content:space-between;align-items:center;font-size:.7rem;padding:2px 0}
-.ks-sc-metric-lbl{font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);width:28px;flex-shrink:0}
-.ks-sc-metric-val{font-family:var(--mono);font-size:.72rem;color:var(--text);flex:1;text-align:right;padding-right:6px}
-.ks-sc-metric-meta{font-family:var(--mono);font-size:.68rem;color:var(--muted);display:flex;align-items:center;gap:4px}
+.ks-week-table-wrap{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.ks-week-table-lbl{font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.ks-week-tbl{width:100%;font-size:.78rem}
+.ks-week-tbl th{padding:6px 8px;white-space:nowrap;font-size:.7rem}
+.ks-week-tbl td{padding:5px 8px;white-space:nowrap}
+.ks-week-tbl tbody tr:not(.ks-metric-subrow){border-top:1px solid var(--border)}
+.ks-metric-subrow td{padding-top:2px;padding-bottom:2px;border-top:none!important}
 .ks-chart{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
 .ks-chart-canvas-wrap{display:block;width:100%;height:120px}
 .ks-chart-canvas-wrap canvas{display:block;width:100%!important;height:120px!important;max-height:120px}
@@ -710,7 +712,7 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
   .gc-head{flex-direction:column;gap:8px}
   .gc-liq{text-align:left}
   .gc-sellers-head,.gc-seller-row{grid-template-columns:1fr auto 100px}
-  .gc-seller-pcs,.gc-seller-meta,.gc-sellers-head span:nth-child(3),.gc-sellers-head span:nth-child(4){display:none}
+  .gc-seller-pcs,.gc-sellers-head span:nth-child(3){display:none}
   .gc-agg-chart{padding:12px}
   .gc-agg-chart canvas,.gc-chart-wrap canvas{height:auto!important;min-height:80px}
   .fin-kpis{grid-template-columns:repeat(3,1fr)}
@@ -722,7 +724,7 @@ select.auth-inp{appearance:none;padding-right:32px;background-image:url("data:im
   .logo{font-size:.6rem;letter-spacing:.1em}
   .tab{padding:0 8px;font-size:.62rem;min-height:44px}
   .gc-sellers-head,.gc-seller-row{grid-template-columns:1fr 90px}
-  .gc-seller-liq,.gc-seller-meta{display:none}
+  .gc-seller-liq{display:none}
   /* Produtos: hide inactive pills on small screens */
   .filter-pills .prod-pill:not(.on){display:none}
   /* 2-column KPI grids on very small screens */
